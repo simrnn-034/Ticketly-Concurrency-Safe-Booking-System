@@ -1,0 +1,108 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User{
+  id String @id @default(uuid())
+  email String @unique
+  password String
+  name String?
+  phone String?
+  role String @default("user")
+  createdAt DateTime @default(now())
+
+  events Event[] @relation("OrganizerEvents")
+  bookings Booking[]
+}
+
+model Event{
+  id String @id @default(uuid())
+  organizerId String
+  title String
+  description String?
+  venue String?
+  eventDate DateTime
+  createdAt DateTime @default(now())
+  status String @default("draft")
+  totalSeats Int
+
+  organizer User @relation("OrganizerEvents", fields: [organizerId], references: [id])
+  seatCategories SeatCategory[]
+  seats Seat[]
+  bookings Booking[]
+}
+
+model SeatCategory{
+  id String @id @default(uuid())
+  eventId String
+  categoryName String
+  price Float
+  totalSeats Int
+  colorHex String?
+
+  event Event @relation(fields: [eventId], references: [id])
+  seats Seat[]
+}
+
+model Seat{
+  id String @id @default(uuid())
+  eventId String
+  categoryId String
+  rowLabel String
+  seatNumber Int
+  status String @default("available") 
+  version Int @default(0)
+
+  event Event @relation(fields: [eventId], references: [id])
+  category SeatCategory @relation(fields: [categoryId], references: [id])
+  bookingSeats BookingSeat[]  
+
+  @@unique([eventId, rowLabel, seatNumber])
+  @@index([eventId, status],map: "idx_event_status")
+  @@index ([eventId],map : "idx_seats_event")
+}
+
+model Booking{
+  id String @id @default(uuid())
+  userId String
+  eventId String
+  status String @default("pending")
+  totalPrice Float?
+  paymentRef String?
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id])
+  bookingSeats BookingSeat[]
+
+  @@index([userId],map:"idx_bookings_user")
+  @@index([eventId],map:"idx_bookings_event")
+}
+
+// Junction Table
+model BookingSeat{
+  id String @id @default(uuid())
+  bookingId String
+  seatId String
+  pricePaid Float
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  seat Seat @relation(fields: [seatId], references: [id])
+
+  @@unique([bookingId, seatId])
+}
+
+
+

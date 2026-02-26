@@ -8,3 +8,5 @@ coverage/
 .idea/
 .vscode/
 npm-debug.log*
+/generated/prisma
+/prisma/client/
