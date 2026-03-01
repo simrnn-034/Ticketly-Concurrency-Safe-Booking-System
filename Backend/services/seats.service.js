@@ -1,45 +1,76 @@
 import client from "../config/redis.js";
+import prisma from "../config/prisma.js";
 
-const HoldSeat = async (req,res)=>{
-  const userId = req.user.id;
-  const eventId = req.params.eventId;
-  const {seatIds} = req.body;
+export const holdSeats = async (userId, eventId, seatIds) => {
   const heldSoFar = [];
-  for(let seatId of seatIds){
+
+  for (let seatId of seatIds) {
     const holdKey = `hold:${eventId}:${seatId}`;
     const existing = await client.get(holdKey);
-    if(existing){
-      for(let heldId of heldSoFar){
+
+    if (existing) {
+      for (let heldId of heldSoFar) {
         await client.del(`hold:${eventId}:${heldId}`);
       }
-        return res.status(409).json({error : "Seat already held."});
+      throw new Error('Seat already held');
     }
-    const held = await client.set(holdKey,userId,'EX',600,'NX');
-    if(!held){
-      for(let heldId of heldSoFar){
+
+    const held = await client.set(holdKey, userId, 'EX', 600, 'NX');
+
+    if (!held) {
+      for (let heldId of heldSoFar) {
         await client.del(`hold:${eventId}:${heldId}`);
       }
-      return res.status(409).json({error: "Seat Taken"})
+      throw new Error('Seat taken');
     }
+
     heldSoFar.push(seatId);
   }
-  return res.status(200).json({success : true});
-}
+};
 
-const ReleaseSeat = async (req,res) =>{
-  const userId = req.user.id;
-  const eventId = req.params.eventId;
-  const {seatIds} = req.body;
-  for(let seatId of seatIds){
+export const releaseSeats = async (userId, eventId, seatIds) => {
+  for (let seatId of seatIds) {
     const holdKey = `hold:${eventId}:${seatId}`;
     const existing = await client.get(holdKey);
 
-    if(existing === userId){
+    if (existing === userId) {
       await client.del(holdKey);
     }
   }
-  return res.status(200).json({success : true});
+};
 
+export const verifyHolds = async (userId, eventId, seatIds) => {
+  for (let seatId of seatIds) {
+    const holdKey = `hold:${eventId}:${seatId}`;
+    const heldBy = await client.get(holdKey);
 
-}
-export default HoldSeat;
+    if (!heldBy) throw new Error(`Seat ${seatId} is not held`);
+    if (heldBy !== userId) throw new Error(`Seat ${seatId} is held by someone else`);
+  }
+};
+
+export const getSeatMap = async (eventId) => {
+  const seats = await prisma.seat.findMany({
+    where: { eventId },
+    include: { category: true }
+  });
+
+  const seatsWithHoldStatus = await Promise.all(
+    seats.map(async (seat) => {
+      const holdKey = `hold:${eventId}:${seat.id}`;
+      const heldBy = await client.get(holdKey);
+      return {
+        ...seat,
+        status: heldBy ? 'held' : seat.status
+      };
+    })
+  );
+
+  const groupedByRow = seatsWithHoldStatus.reduce((acc, seat) => {
+    if (!acc[seat.rowLabel]) acc[seat.rowLabel] = [];
+    acc[seat.rowLabel].push(seat);
+    return acc;
+  }, {});
+
+  return groupedByRow;
+};
