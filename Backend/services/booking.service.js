@@ -2,9 +2,13 @@ import redlock from "../config/redlock.js";
 import prisma from "../config/prisma.js";
 import client from "../config/redis.js";
 import { verifyHolds } from "./seats.service.js";
+import { notificationQueue } from "../queues/index.js";
+import { use } from "react";
 
 
 const initiateBooking = async (userId, eventId, seatIds) =>{
+    const activeBooking = await client.get(`active-booking:${userId}`);
+  if (activeBooking) throw new Error('You already have a pending booking');
     // verify all holds exist and belong to this user
     await verifyHolds(userId, eventId, seatIds);
 
@@ -48,9 +52,15 @@ const initiateBooking = async (userId, eventId, seatIds) =>{
             }
         });
 
+
         return newBooking;
     });
 
+    await client.set(
+  `active-booking:${userId}`,
+  booking.id,
+  'EX', 600  
+);
     return{
         bookingId: booking.id,
         totalAmount,
@@ -110,6 +120,17 @@ const confirmBooking = async (userId, bookingId) =>{
         await Promise.all(
             seatIds.map(id => client.del(`hold:${booking.eventId}:${id}`))
         );
+await client.del(`seatmap:${booking.eventId}`);
+
+        await notificationQueue.add('booking-confirmation',{
+            userId,
+            bookingId,
+            eventId: booking.eventId
+        },
+    {
+        attempts: 3,
+        backoff: {type: 'exponential', delay: 2000}
+    })
 
         return {bookingId, status: 'confirmed'};
     }
@@ -147,8 +168,15 @@ const cancelBooking = async (userId, bookingId) =>{
     });
 
 
-    // add notification plug
-    // await notificationQueue.add('booking cancelled),{userId, bookingId})
+    await notificationQueue.add('booking-cancellation',{
+        userId,
+        bookingId,
+        eventId: booking.eventId
+    },
+{
+    attempts: 3,
+    backoff: {type: 'exponential', delay: 2000}
+})
     return {bookingId,status: 'cancelled'};
 }
 

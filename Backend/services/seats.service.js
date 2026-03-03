@@ -50,6 +50,9 @@ export const verifyHolds = async (userId, eventId, seatIds) => {
 };
 
 export const getSeatMap = async (eventId) => {
+  const cached = client.get(`seatmap:${eventId}`);
+  if(cached) return JSON.parse(cached);
+
   const seats = await prisma.seat.findMany({
     where: { eventId },
     include: { category: true }
@@ -72,5 +75,7 @@ export const getSeatMap = async (eventId) => {
     return acc;
   }, {});
 
+  await client.set(`seatmap:${eventId}`,JSON.stringify(groupedByRow),'EX',60);
+  
   return groupedByRow;
 };

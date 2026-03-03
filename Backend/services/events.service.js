@@ -1,5 +1,7 @@
 import { use } from 'react';
 import prisma from '../config/prisma.js';
+import { eventQueue, notificationQueue } from '../queues/index.js';
+import client from '../config/redis.js';
 
 const InsertEvent = async (req, res) => {
     const organizerId = req.user.id;
@@ -59,6 +61,8 @@ const getEvents = async () => {
 };
 
 const getEventById = async (eventId) => {
+    const cached = client.get(`event:${eventId}`);
+    if(cached) return JSON.parse(cached);
     const event = await prisma.event.findUnique({
         where: { id: eventId },
         include: {
@@ -73,11 +77,13 @@ const getEventById = async (eventId) => {
         }
     });
     if (!event) throw new Error('Event Not Found');
+
+    await client.set(`event:${eventId}`,JSON.stringify(event),'EX',300);
     return event;
 }
 
 const publishEvent = async (userId, eventId) => {
-    const event = prisma.event.findUnique({
+    const event = await prisma.event.findUnique({
         where: { id: eventId }
     });
 
@@ -91,6 +97,17 @@ const publishEvent = async (userId, eventId) => {
         data: { status: 'published' }
     });
 
+    const delay = new Date(event.eventDate).getTime() - Date.now();
+    if (delay <= 0) {
+  throw new Error('Event date has already passed');
+}
+
+    await eventQueue.add('complete-event', {
+        eventId
+    },{
+        delay,
+        jobId: `complete-event-${eventId}`
+    })
     return updatedEvent;
 };
 
@@ -136,11 +153,15 @@ export const cancelEvent = async (userId, eventId) => {
     }
   });
 
-  // notify all affected users (plug in after BullMQ)
-  // await notificationQueue.add('event-cancelled', { eventId })
+  await notificationQueue.add('event-cancellation',{
+    eventId
+  },
+{
+    attempts: 3,
+    backoff: {type: 'exponential', delay: 2000}
+})
 
   return { eventId, status: 'cancelled' };
 };
-
 
 export default { InsertEvent, getEvents, getEventById, publishEvent, cancelEvent};
