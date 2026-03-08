@@ -1,5 +1,5 @@
 import Redlock from 'redlock';
-import client from './redis';
+import client from './redis.js';
 
 const redlock = new Redlock(
     [client],  // array of redis clients

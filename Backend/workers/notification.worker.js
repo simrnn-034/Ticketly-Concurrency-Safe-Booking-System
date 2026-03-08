@@ -1,7 +1,7 @@
 import {Worker} from 'bullmq';
 import { sendBookingConfirmationEmail, sendEventCancelledEmail, sendBookingCancellationEmail } from '../notifications/email.js';
 import prisma from '../config/prisma.js';
-import { worker } from 'node:cluster';
+
 const connection = {
     host: process.env.REDIS_HOST,
     port : process.env.REDIS_PORT

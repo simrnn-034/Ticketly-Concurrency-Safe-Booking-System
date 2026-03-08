@@ -3,7 +3,6 @@ import prisma from "../config/prisma.js";
 import client from "../config/redis.js";
 import { verifyHolds } from "./seats.service.js";
 import { notificationQueue } from "../queues/index.js";
-import { use } from "react";
 
 
 const initiateBooking = async (userId, eventId, seatIds) =>{
@@ -180,4 +179,60 @@ const cancelBooking = async (userId, bookingId) =>{
     return {bookingId,status: 'cancelled'};
 }
 
-export { initiateBooking, confirmBooking , cancelBooking};
+const getUserBookings = async (userId) => {
+  const bookings = await prisma.booking.findMany({
+    where: { userId },
+    include: {
+      BookingSeat: {
+        include: {
+          seat: {
+            include: { category: true }
+          }
+        }
+      },
+      event: {
+        select: {
+          id: true,
+          title: true,
+          venue: true,
+          eventDate: true,
+          status: true
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  return bookings;
+};
+
+const getBooking = async (userId, bookingId) => {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      seats: {
+        include: {
+          seat: {
+            include: { category: true }
+          }
+        }
+      },
+      event: {
+        select: {
+          id: true,
+          title: true,
+          venue: true,
+          eventDate: true,
+          status: true
+        }
+      }
+    }
+  });
+
+  if (!booking) throw new Error('Booking not found');
+  if (booking.userId !== userId) throw new Error('Unauthorized');
+
+  return booking;
+};
+
+export { initiateBooking, confirmBooking , cancelBooking, getBooking, getUserBookings};
