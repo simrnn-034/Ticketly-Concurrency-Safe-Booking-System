@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TicketGuard — Live Events</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="ticker">
+  <div class="ticker-inner">
+    <span>⚡ CONCURRENT BOOKING PROTECTION</span>
+    <span>🎫 SECURE SEAT SELECTION</span>
+    <span>🔒 REDIS-POWERED HOLDS</span>
+    <span>✦ INSTANT CONFIRMATION</span>
+    <span>⚡ CONCURRENT BOOKING PROTECTION</span>
+    <span>🎫 SECURE SEAT SELECTION</span>
+    <span>🔒 REDIS-POWERED HOLDS</span>
+    <span>✦ INSTANT CONFIRMATION</span>
+  </div>
+</div>
+
+<nav>
+  <a href="index.html" class="nav-logo">TICKET<span>GUARD</span></a>
+  <div class="nav-links">
+    <a href="index.html" class="active">Events</a>
+    <a href="bookings.html">My Bookings</a>
+  </div>
+  <div class="nav-auth" id="nav-user-info-wrap">
+    <span id="nav-user-info"></span>
+    <div class="nav-auth"></div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">// Powered by Redis + PostgreSQL</div>
+    <h1 class="hero-title">BOOK YOUR<br><span>SEAT.</span><br>INSTANTLY.</h1>
+    <p class="hero-desc">Concurrency-safe ticketing with real-time seat holds, distributed locking, and instant booking confirmation.</p>
+    <div class="hero-actions">
+      <a href="#events" class="btn btn-gold btn-lg">Browse Events</a>
+      <a href="auth.html" class="btn btn-outline btn-lg" id="hero-auth-btn">Create Account</a>
+    </div>
+  </div>
+</div>
+
+<!-- EVENTS SECTION -->
+<div class="container page" id="events">
+  <div class="page-header">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:1rem;">
+      <div>
+        <h2 class="page-title">UPCOMING EVENTS</h2>
+        <p class="page-subtitle">Select an event to view the seat map and book your tickets</p>
+      </div>
+      <div id="organizer-actions" style="display:none;">
+        <button class="btn btn-gold" onclick="openModal('create-event-modal')">+ Create Event</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-bar">
+    <input type="text" id="search-input" placeholder="Search events, venues..." />
+    <button class="btn btn-outline" onclick="loadEvents()">Search</button>
+  </div>
+
+  <!-- EVENTS GRID -->
+  <div id="events-grid">
+    <!-- skeleton loaders -->
+    <div class="events-grid" id="skeleton-grid">
+      ${Array(6).fill(`
+        <div class="card">
+          <div class="event-card-header">
+            <div class="skeleton" style="height:24px; width:70%; margin-bottom:8px;"></div>
+            <div class="skeleton" style="height:14px; width:50%;"></div>
+            <div class="skeleton" style="height:14px; width:30%; margin-top:12px;"></div>
+          </div>
+          <div class="card-footer">
+            <div class="skeleton" style="height:32px;"></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    <div id="events-list" class="events-grid" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- CREATE EVENT MODAL -->
+<div class="modal-overlay" id="create-event-modal">
+  <div class="modal" style="max-width:600px; max-height:80vh; overflow-y:auto;">
+    <h2 class="modal-title">CREATE EVENT</h2>
+    <p class="modal-subtitle">Fill in the details to create a new event with seating plan</p>
+
+    <div class="form-group">
+      <label>Event Title</label>
+      <input type="text" id="ce-title" placeholder="Rock Concert 2025" />
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="ce-desc" placeholder="Event description..." rows="3"></textarea>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="form-group">
+        <label>Venue</label>
+        <input type="text" id="ce-venue" placeholder="Wembley Arena" />
+      </div>
+      <div class="form-group">
+        <label>Date & Time</label>
+        <input type="datetime-local" id="ce-date" />
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <p style="font-size:0.8rem; color:var(--muted); margin-bottom:1rem;">SEATING CATEGORIES</p>
+
+    <div id="categories-container">
+      <div class="category-entry" style="background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:1rem; margin-bottom:0.75rem;">
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Category Name</label>
+            <input type="text" class="cat-name" placeholder="VIP" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Price (₹)</label>
+            <input type="number" class="cat-price" placeholder="1500" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Seats per Row</label>
+            <input type="number" class="cat-spr" placeholder="10" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:0.75rem; margin-bottom:0;">
+          <label>Rows (comma separated)</label>
+          <input type="text" class="cat-rows" placeholder="A, B, C" />
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-outline btn-sm" onclick="addCategory()" style="margin-bottom:1rem;">+ Add Category</button>
+
+    <div class="modal-actions">
+      <button class="btn btn-gold btn-full" id="create-event-btn" onclick="submitCreateEvent()">Create Event</button>
+      <button class="btn btn-outline" onclick="closeModal('create-event-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="utils.js"></script>
+<script src="js/index.js"></script>
+</body>
+</html>

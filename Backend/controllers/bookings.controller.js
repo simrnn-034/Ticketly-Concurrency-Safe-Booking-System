@@ -58,6 +58,7 @@ export const confirm = async (req, res) => {
     ) {
       return res.status(409).json({ error: err.message });
     }
+    console.log(err);
     return res.status(500).json({ error: err.message });
   }
 };

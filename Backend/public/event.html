@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event — TicketGuard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">TICKET<span>GUARD</span></a>
+  <div class="nav-links">
+    <a href="index.html">Events</a>
+    <a href="bookings.html">My Bookings</a>
+  </div>
+  <div style="display:flex; gap:0.75rem; align-items:center;">
+    <span id="nav-user-info" style="font-size:0.8rem; color:var(--muted);"></span>
+    <div class="nav-auth"></div>
+  </div>
+</nav>
+
+<div class="container page" id="page-content">
+  <div class="skeleton" style="height:120px; border-radius:8px; margin-bottom:2rem;"></div>
+  <div style="display:grid; grid-template-columns:1fr 360px; gap:2rem;">
+    <div class="skeleton" style="height:500px; border-radius:8px;"></div>
+    <div class="skeleton" style="height:300px; border-radius:8px;"></div>
+  </div>
+</div>
+
+<!-- CONFIRM BOOKING MODAL -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal">
+    <h2 class="modal-title">CONFIRM BOOKING</h2>
+    <p class="modal-subtitle">Review your selected seats before confirming</p>
+
+    <div id="modal-seats-list" style="margin-bottom:1rem;"></div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem; background:var(--bg3); border-radius:4px; margin-bottom:1rem;">
+      <span style="font-size:0.85rem; color:var(--muted);">Total Amount</span>
+      <span style="font-family:'DM Mono',monospace; font-size:1.1rem; color:var(--gold);" id="modal-total"></span>
+    </div>
+
+    <div style="font-size:0.75rem; color:var(--muted); margin-bottom:1rem;">
+      ⚡ Your seats are held for 10 minutes. Complete the booking before the hold expires.
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-gold btn-full" id="confirm-btn" onclick="confirmBooking()">Confirm Booking</button>
+      <button class="btn btn-outline" onclick="closeModal('confirm-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ORGANIZER PANEL MODAL -->
+<div class="modal-overlay" id="organizer-modal">
+  <div class="modal">
+    <h2 class="modal-title">EVENT ACTIONS</h2>
+    <p class="modal-subtitle" id="org-modal-subtitle"></p>
+    <div id="org-actions" style="display:flex; flex-direction:column; gap:0.75rem; margin-top:1rem;"></div>
+    <div class="modal-actions" style="margin-top:1rem;">
+      <button class="btn btn-outline btn-full" onclick="closeModal('organizer-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="utils.js"></script>
+<script src="js/event.js"></script>
+</body>
+</html>

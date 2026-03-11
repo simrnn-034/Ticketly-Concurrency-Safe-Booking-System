@@ -51,7 +51,7 @@ export const InsertEvent = async (organizerId, { title, description, date_time, 
 
 export const getEvents = async () => {
   return await prisma.event.findMany({
-    where: { status: 'published' },
+    where: { status: 'published'},
     orderBy: { eventDate: 'asc' }
   });
 };
@@ -63,7 +63,7 @@ export const getEventById = async (eventId) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
-      categories: true,
+      seatCategories: true,
       organizer: {
         select: { id: true, name: true, email: true }
       }
@@ -86,14 +86,14 @@ export const publishEvent = async (userId, eventId) => {
   if (event.status === 'published') throw new Error('Event already published');
   if (event.status === 'cancelled') throw new Error('Cannot publish a cancelled event');
 
+    const delay = new Date(event.eventDate).getTime() - Date.now();
+
+  if (delay <= 0) throw new Error('Event date has already passed');
   const updatedEvent = await prisma.event.update({
     where: { id: eventId },
     data: { status: 'published' }
   });
 
-  const delay = new Date(event.eventDate).getTime() - Date.now();
-
-  if (delay <= 0) throw new Error('Event date has already passed');
 
   await eventQueue.add('complete-event', { eventId }, {
     delay,

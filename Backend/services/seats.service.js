@@ -50,7 +50,7 @@ export const verifyHolds = async (userId, eventId, seatIds) => {
 };
 
 export const getSeatMap = async (eventId) => {
-  const cached = client.get(`seatmap:${eventId}`);
+  const cached = await client.get(`seatmap:${eventId}`);
   if(cached) return JSON.parse(cached);
 
   const seats = await prisma.seat.findMany({
