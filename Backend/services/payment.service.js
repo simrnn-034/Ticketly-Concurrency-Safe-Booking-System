@@ -12,7 +12,7 @@ export const createOrder = async (amount, currency, receipt) => {
         return order;
     } catch (error) {
         console.error("Error creating Razorpay order:", error);
-        throw new Error("Failed to create order");
+        throw { message: "Failed to create order", status: 500 };
     }
 };
 

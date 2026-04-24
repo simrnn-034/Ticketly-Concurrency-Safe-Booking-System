@@ -9,7 +9,7 @@ import crypto from "crypto";
 
 const initiateBooking = async (userId, eventId, seatIds) => {
     const activeBooking = await client.get(`active-booking:${userId}`);
-    if (activeBooking) throw new Error('You already have a pending booking');
+    if (activeBooking) throw { message: 'You already have a pending booking', status: 409 };
     // verify all holds exist and belong to this user
     await verifyHolds(userId, eventId, seatIds);
 
@@ -20,13 +20,13 @@ const initiateBooking = async (userId, eventId, seatIds) => {
     });
 
     if (seats.length !== seatIds.length) {
-        throw new Error('one or more seats not found');
+        throw { message: 'one or more seats not found', status: 404 };
     }
 
     // check all seats are still available in DB
     const unavailable = seats.filter(s => s.status !== 'available');
     if (unavailable.length > 0) {
-        throw new Error('One or more seats are no longer available');
+        throw { message: 'One or more seats are no longer available', status: 409 };
     }
 
     // calculate total amount
@@ -94,23 +94,23 @@ const initiateBooking = async (userId, eventId, seatIds) => {
 const confirmBooking = async (userId, bookingId,paymentDetails) => {
     const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = paymentDetails;
     if(!razorpayOrderId||!razorpayPaymentId||!razorpaySignature){
-        throw new Error('Payment details required');
+        throw { message: 'Payment details required', status: 400 };
     }
 
     const checkSignature = await verifyPayment(razorpayPaymentId,razorpayOrderId,razorpaySignature);
     if(!checkSignature){
-        throw new Error('Payment verification failed - invalid signature');
+        throw { message: 'Payment verification failed - invalid signature', status: 400 };
     }
     const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
         include: { bookingSeats: true }
     });
 
-    if (!booking) throw new Error("Booking not Found");
-    if (booking.userId !== userId) throw new Error("Unauthorized");
-    if (booking.status !== 'pending') throw new Error('Booking already processed');
+    if (!booking) throw { message: "Booking not Found", status: 404 };
+    if (booking.userId !== userId) throw { message: "Unauthorized", status: 401 };
+    if (booking.status !== 'pending') throw { message: 'Booking already processed', status: 409 };
     if(booking.razorpayOrderId !== razorpayOrderId){
-        throw new Error('Payment order mismatch');
+        throw { message: 'Payment order mismatch', status: 400 };
     }
     const seatIds = booking.bookingSeats.map(s => s.seatId);
 
@@ -122,7 +122,7 @@ const confirmBooking = async (userId, bookingId,paymentDetails) => {
         lock = await redlock.acquire(lockKeys, 10000);
     }
     catch (err) {
-        throw new Error('Seats are currently being processed, try again');
+        throw { message: 'Seats are currently being processed, try again', status: 409 };
     }
 
     try {
@@ -139,7 +139,7 @@ const confirmBooking = async (userId, bookingId,paymentDetails) => {
 
            const unavailable = seats.filter(s => s.status === 'booked' || s.status === 'blocked'); 
             if (unavailable.length > 0) {
-                throw new Error('One or more seats are no longer available');
+                throw { message: 'One or more seats are no longer available', status: 409 };
             }
 
             await trx.seat.updateMany({
@@ -191,10 +191,10 @@ const cancelBooking = async (userId, bookingId) => {
         include: { bookingSeats: true }
     });
 
-    if (!booking) throw new Error('Booking Not Found');
-    if (booking.userId !== userId) throw new Error('Unauthorized');
-    if (booking.status === 'cancelled') throw new Error('Booking Already Cancelled');
-    if (!['confirmed','pending'].includes(booking.status)) throw new Error('Only confirmed or pending bookings can be cancelled');
+    if (!booking) throw { message: "Booking not Found", status: 404 };
+    if (booking.userId !== userId) throw { message: "Unauthorized", status: 401 };
+    if (booking.status === 'cancelled') throw { message: 'Booking Already Cancelled', status: 409 };
+    if (!['confirmed','pending'].includes(booking.status)) throw { message: 'Only confirmed or pending bookings can be cancelled', status: 400 };
 
 
     const seatIds = booking.bookingSeats.map(s => s.seatId);

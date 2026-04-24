@@ -80,7 +80,7 @@ export const getEventById = async (eventId) => {
     }
   });
 
-  if (!event) throw new Error('Event not found');
+  if (!event) throw { message: 'Event not found', status: 404 };
 
   await client.set(`event:${eventId}`, JSON.stringify(event), 'EX', 300);
   return event;
@@ -91,14 +91,14 @@ export const publishEvent = async (userId, eventId) => {
     where: { id: eventId }
   });
 
-  if (!event) throw new Error('Event not found');
-  if (event.organizerId !== userId) throw new Error('Unauthorized');
-  if (event.status === 'published') throw new Error('Event already published');
-  if (event.status === 'cancelled') throw new Error('Cannot publish a cancelled event');
+  if (!event) throw { message: 'Event not found', status: 404 };
+  if (event.organizerId !== userId) throw { message: 'Unauthorized', status: 401 };
+  if (event.status === 'published') throw { message: 'Event already published', status: 409 };
+  if (event.status === 'cancelled') throw { message: 'Cannot publish a cancelled event', status: 400 };
 
     const delay = new Date(event.eventDate).getTime() - Date.now();
 
-  if (delay <= 0) throw new Error('Event date has already passed');
+  if (delay <= 0) throw { message: 'Event date has already passed', status: 400 };
   const updatedEvent = await prisma.event.update({
     where: { id: eventId },
     data: { status: 'published' }
@@ -135,9 +135,9 @@ export const cancelEvent = async (userId, eventId) => {
     where: { id: eventId }
   });
 
-  if (!event) throw new Error('Event not found');
-  if (event.organizerId !== userId) throw new Error('Unauthorized');
-  if (event.status === 'cancelled') throw new Error('Event already cancelled');
+  if (!event) throw { message: 'Event not found', status: 404 };
+  if (event.organizerId !== userId) throw { message: 'Unauthorized', status: 401 };
+  if (event.status === 'cancelled') throw { message: 'Event already cancelled', status: 409 };
 
   await prisma.$transaction(async (trx) => {
     await trx.event.update({

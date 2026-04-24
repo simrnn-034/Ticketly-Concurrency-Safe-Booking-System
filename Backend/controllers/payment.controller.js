@@ -9,7 +9,8 @@ export const initiatePayment = async (req, res) => {
         res.json(order);
     }
     catch (error) {
-        res.status(500).json({ error: error.message });
+        const status = error.status || 500;
+        res.status(status).json({ error: error.message });
     }
 };
 

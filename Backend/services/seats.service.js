@@ -10,7 +10,7 @@ export const holdSeats = async (userId, eventId, seatIds) => {
 });
 
 if (existingBooking) {
-  throw new Error('Complete or cancel existing booking first');
+  throw { message: 'Complete or cancel existing booking first', status: 409 };
 }
   const heldSoFar = [];
 
@@ -22,7 +22,7 @@ if (existingBooking) {
       for (let heldId of heldSoFar) {
         await client.del(`hold:${eventId}:${heldId}`);
       }
-      throw new Error('Seat already held');
+      throw { message: 'Seat already held', status: 409 };
     }
 
     const held = await client.set(holdKey, userId, 'EX', 600, 'NX');
@@ -31,7 +31,7 @@ if (existingBooking) {
       for (let heldId of heldSoFar) {
         await client.del(`hold:${eventId}:${heldId}`);
       }
-      throw new Error('Seat taken');
+      throw { message: 'Seat taken', status: 409 };
     }
 
     heldSoFar.push(seatId);

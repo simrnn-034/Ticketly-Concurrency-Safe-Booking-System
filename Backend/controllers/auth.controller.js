@@ -47,7 +47,8 @@ return res.status(201).json({
 });
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    return res.status(status).json({ error: err.message });
   }
 };
 
@@ -88,7 +89,8 @@ return res.status(200).json({
 });
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    return res.status(status).json({ error: err.message });
   }
 };
 
@@ -113,7 +115,8 @@ export const logout = async (req, res) => {
     });
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    return res.status(status).json({ error: err.message });
   }
 };
 
@@ -127,7 +130,6 @@ export const me = async (req, res) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // optional: fetch fresh user from DB
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: {

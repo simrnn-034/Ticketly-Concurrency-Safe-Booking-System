@@ -17,10 +17,8 @@ export const HoldSeat = async (req, res) => {
     return res.status(200).json({ success: true });
 
   } catch (err) {
-    if (err.message === 'Seat already held' || err.message === 'Seat taken') {
-      return res.status(409).json({ error: err.message });
-    }
-    return res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    return res.status(status).json({ error: err.message });
   }
 };
 
@@ -37,7 +35,8 @@ export const ReleaseSeat = async (req, res) => {
     return res.status(200).json({ success: true });
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    return res.status(status).json({ error: err.message });
   }
 };
 
@@ -49,6 +48,7 @@ export const GetSeatMap = async (req, res) => {
     return res.status(200).json({ success: true, data });
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    return res.status(status).json({ error: err.message });
   }
 };
