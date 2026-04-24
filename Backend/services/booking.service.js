@@ -2,8 +2,10 @@ import redlock from "../config/redlock.js";
 import prisma from "../config/prisma.js";
 import client from "../config/redis.js";
 import { verifyHolds } from "./seats.service.js";
-import { notificationQueue } from "../queues/index.js";
+import { notificationQueue, bookingQueue } from "../queues/index.js";
 import { Prisma } from '@prisma/client';
+import {createOrder, verifyPayment} from "./payment.service.js";
+import crypto from "crypto";
 
 const initiateBooking = async (userId, eventId, seatIds) => {
     const activeBooking = await client.get(`active-booking:${userId}`);
@@ -32,6 +34,8 @@ const initiateBooking = async (userId, eventId, seatIds) => {
         return sum + Number(seat.category.price);
     }, 0);
 
+    const razorpayOrder = await createOrder(totalAmount,'INR',`receipt_${Date.now()}`);
+
     // create pending booking with bookingSeats in one transaction
     const booking = await prisma.$transaction(async (trx) => {
         const newBooking = await trx.booking.create({
@@ -41,6 +45,7 @@ const initiateBooking = async (userId, eventId, seatIds) => {
                 status: 'pending',
                 totalPrice: totalAmount,
                 paymentRef: 'pending',
+                razorpayOrderId: razorpayOrder.id,
                 expiresAt: new Date(Date.now() + 10 * 60 * 1000),
                 bookingSeats: {
                     create: seats.map(seat => ({
@@ -51,8 +56,24 @@ const initiateBooking = async (userId, eventId, seatIds) => {
             }
         });
 
+        await trx.seat.updateMany({
+        where: { id: { in: seatIds } },
+        data: { status: 'held' }
+    });
 
         return newBooking;
+    });
+
+
+
+    await bookingQueue.add('expire-booking', {
+        bookingId: booking.id,
+        userId,
+        eventId,
+        seatIds
+    }, {
+        delay: 10 * 60 * 1000,
+        jobId: `expire-booking-${booking.id}`
     });
 
     await client.set(
@@ -63,12 +84,23 @@ const initiateBooking = async (userId, eventId, seatIds) => {
     return {
         bookingId: booking.id,
         totalAmount,
-        expiresAt: booking.expiresAt
+        expiresAt: booking.expiresAt,
+        razorpayOrderId: razorpayOrder.id,
+        razorpayKeyId: process.env.RAZORPAY_KEY_ID
     };
 
 };
 
-const confirmBooking = async (userId, bookingId) => {
+const confirmBooking = async (userId, bookingId,paymentDetails) => {
+    const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = paymentDetails;
+    if(!razorpayOrderId||!razorpayPaymentId||!razorpaySignature){
+        throw new Error('Payment details required');
+    }
+
+    const checkSignature = await verifyPayment(razorpayPaymentId,razorpayOrderId,razorpaySignature);
+    if(!checkSignature){
+        throw new Error('Payment verification failed - invalid signature');
+    }
     const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
         include: { bookingSeats: true }
@@ -77,7 +109,9 @@ const confirmBooking = async (userId, bookingId) => {
     if (!booking) throw new Error("Booking not Found");
     if (booking.userId !== userId) throw new Error("Unauthorized");
     if (booking.status !== 'pending') throw new Error('Booking already processed');
-
+    if(booking.razorpayOrderId !== razorpayOrderId){
+        throw new Error('Payment order mismatch');
+    }
     const seatIds = booking.bookingSeats.map(s => s.seatId);
 
     // acquire locks
@@ -103,7 +137,7 @@ const confirmBooking = async (userId, bookingId) => {
     `
 );
 
-            const unavailable = seats.filter(s => s.status !== 'available');
+           const unavailable = seats.filter(s => s.status === 'booked' || s.status === 'blocked'); 
             if (unavailable.length > 0) {
                 throw new Error('One or more seats are no longer available');
             }
@@ -115,7 +149,12 @@ const confirmBooking = async (userId, bookingId) => {
 
             await trx.booking.update({
                 where: { id: bookingId },
-                data: { status: 'confirmed' }
+                data: { 
+                    status: 'confirmed',
+                    razorpayPaymentId,
+                    razorpaySignature,
+                    paymentRef: razorpayPaymentId
+                 }
             });
         });
 
@@ -123,6 +162,11 @@ const confirmBooking = async (userId, bookingId) => {
             seatIds.map(id => client.del(`hold:${booking.eventId}:${id}`))
         );
         await client.del(`seatmap:${booking.eventId}`);
+        await client.del(`active-booking:${userId}`);
+        await client.del(`recommendations:${userId}`);
+
+        const job = await bookingQueue.getJob(`expire-booking-${bookingId}`);
+        if (job) await job.remove();
 
         await notificationQueue.add('booking-confirmation', {
             userId,
@@ -150,9 +194,10 @@ const cancelBooking = async (userId, bookingId) => {
     if (!booking) throw new Error('Booking Not Found');
     if (booking.userId !== userId) throw new Error('Unauthorized');
     if (booking.status === 'cancelled') throw new Error('Booking Already Cancelled');
-    if (booking.status !== 'confirmed') throw new Error('Only confirmed bookings can be cancelled');
+    if (!['confirmed','pending'].includes(booking.status)) throw new Error('Only confirmed or pending bookings can be cancelled');
 
-    const seatIds = booking.seats.map(s => s.seatId);
+
+    const seatIds = booking.bookingSeats.map(s => s.seatId);
 
     await prisma.$transaction(async (trx) => {
         await trx.booking.update({
@@ -169,6 +214,12 @@ const cancelBooking = async (userId, bookingId) => {
         });
     });
 
+    const job = await bookingQueue.getJob(`expire-booking-${bookingId}`);
+    if (job) await job.remove();
+
+    await client.del(`active-booking:${userId}`);
+    await client.del(`seatmap:${booking.eventId}`);
+    await client.del(`hold:${booking.eventId}:${seatIds.join(',')}`);
 
     await notificationQueue.add('booking-cancellation', {
         userId,
@@ -184,7 +235,15 @@ const cancelBooking = async (userId, bookingId) => {
 
 const getUserBookings = async (userId) => {
     const bookings = await prisma.booking.findMany({
-        where: { userId },
+        where: { userId ,
+            OR: [
+                { status: { not: 'pending' } }, // confirmed/cancelled
+    {
+      status: 'pending',
+      expiresAt: { gt: new Date() } 
+    }
+            ]
+         } ,
         include: {
             bookingSeats: {
                 include: {
@@ -238,4 +297,49 @@ const getBooking = async (userId, bookingId) => {
     return booking;
 };
 
-export { initiateBooking, confirmBooking, cancelBooking, getBooking, getUserBookings };
+const scheduleCleanupJob = async () => {
+    await bookingQueue.add('cleanup-expired-bookings', {}, {
+        repeat: { cron: '0 0 * * *' },
+        jobId: 'cleanup-expired-bookings'
+    });
+}
+
+const getActiveBookings = async (userId) => {
+  const now = new Date();
+
+  // mark any expired pending bookings as cancelled
+  await prisma.booking.updateMany({
+    where: {
+      userId,
+      status: 'pending',
+      expiresAt: { lte: now }  // expired ones
+    },
+    data: { status: 'cancelled' }
+  });
+
+  // now return only valid pending booking
+  const booking = await prisma.booking.findFirst({
+    where: {
+      userId,
+      status: 'pending',
+      expiresAt: { gt: now }
+    },
+    include: {
+      bookingSeats: {
+        include: { seat: { include: { category: true } } }
+      },
+      event: {
+        select: { id: true, title: true, venue: true, eventDate: true }
+      }
+    }
+  });
+  booking.razorpayKeyId = process.env.RAZORPAY_KEY_ID; 
+
+  return {
+    booking,
+    
+  }; // single booking, not array — only one active allowed
+};
+
+
+export { initiateBooking, confirmBooking, cancelBooking, getBooking, getUserBookings, scheduleCleanupJob, getActiveBookings };

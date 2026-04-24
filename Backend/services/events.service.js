@@ -14,6 +14,7 @@ export const InsertEvent = async (organizerId, { title, description, date_time, 
         title,
         description,
         eventDate: new Date(date_time),
+        category,
         venue,
         totalSeats,
         organizerId,
@@ -52,12 +53,21 @@ export const InsertEvent = async (organizerId, { title, description, date_time, 
 export const getEvents = async () => {
   return await prisma.event.findMany({
     where: { status: 'published'},
-    orderBy: { eventDate: 'asc' }
+    orderBy: { eventDate: 'asc' },
+    include: {
+      seatCategories: {
+        select: {
+          id: true,
+          categoryName: true,
+          price: true
+        }
+      }
+    }
   });
 };
 
 export const getEventById = async (eventId) => {
-  const cached = await client.get(`event:${eventId}`);  // ← added await
+  const cached = await client.get(`event:${eventId}`);  
   if (cached) return JSON.parse(cached);
 
   const event = await prisma.event.findUnique({
@@ -101,6 +111,23 @@ export const publishEvent = async (userId, eventId) => {
   });
 
   return updatedEvent;
+};
+
+export const getOrganizerEvents = async (organizerId) => {
+  return await prisma.event.findMany({
+    where: { organizerId }, 
+    orderBy: { eventDate: 'asc' },
+    include: {
+      seatCategories: {
+        select: {
+          id: true,
+          categoryName: true,
+          price: true
+
+        }
+      }
+    }
+  });
 };
 
 export const cancelEvent = async (userId, eventId) => {

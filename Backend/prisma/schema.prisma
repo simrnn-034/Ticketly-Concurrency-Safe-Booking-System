@@ -32,6 +32,7 @@ model Event{
   title String
   description String?
   venue String?
+  category    String @default("General")
   eventDate DateTime
   createdAt DateTime @default(now())
   status String @default("draft")
@@ -82,6 +83,9 @@ model Booking{
   paymentRef String?
   expiresAt DateTime?
   createdAt DateTime @default(now())
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  razorpaySignature String?
 
   user User @relation(fields: [userId], references: [id])
   event Event @relation(fields: [eventId], references: [id])

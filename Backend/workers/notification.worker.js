@@ -1,11 +1,7 @@
 import {Worker} from 'bullmq';
 import { sendBookingConfirmationEmail, sendEventCancelledEmail, sendBookingCancellationEmail } from '../notifications/email.js';
 import prisma from '../config/prisma.js';
-
-const connection = {
-    host: process.env.REDIS_HOST,
-    port : process.env.REDIS_PORT
-};
+import {bullConnection} from '../config/redis.js';
 const notificationWorker = new Worker('notification', async (job)=>{
     if(job.name === 'booking-confirmation'){
         const {userId, bookingId, eventId} = job.data;
@@ -67,7 +63,7 @@ const notificationWorker = new Worker('notification', async (job)=>{
             )
         );
     }
-}, {connection});
+}, {connection: bullConnection});
 
 notificationWorker.on('completed', (job) =>{
     console.log(`Notification job ${job.id} completed`);

@@ -1,32 +1,54 @@
 const API = 'http://localhost:3000/api';
 
-// ─── AUTH ───
 const auth = {
-  getToken: () => localStorage.getItem('tg_token'),
-  getUser: () => JSON.parse(localStorage.getItem('tg_user') || 'null'),
-  isLoggedIn: () => !!localStorage.getItem('tg_token'),
-  save: (token, user) => {
-    localStorage.setItem('tg_token', token);
-    localStorage.setItem('tg_user', JSON.stringify(user));
+  user: null,
+  _promise: null,
+
+  async isLoggedIn() {
+    if (this.user) return true;
+    if (!this._promise) {
+      this._promise = api.get('/auth/me')
+        .then(res => { this.user = res.user; return true; })
+        .catch(() => { this.user = null; return false; })
+        .finally(() => { this._promise = null; });
+    }
+    return this._promise;
   },
-  clear: () => {
-    localStorage.removeItem('tg_token');
-    localStorage.removeItem('tg_user');
+
+  getUser() {       
+    return this.user;
+  },
+
+  clear() {
+    this.user = null;
+    this._promise = null;
   }
 };
 
-// ─── API HELPER ───
 async function request(method, path, body = null) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (auth.getToken()) headers['Authorization'] = `Bearer ${auth.getToken()}`;
-
   const res = await fetch(`${API}${path}`, {
     method,
-    headers,
+    credentials: "include", 
+    headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : null
   });
 
   const data = await res.json();
+
+  if (res.status === 401) {
+  const hadSession = !!auth.user;
+  auth.clear(); 
+  const onAuthPage = location.pathname.endsWith('auth.html');
+  if (!onAuthPage && hadSession) {
+    toast('Session expired. Please sign in again.', 'warning');
+    setTimeout(() => window.location.href = 'auth.html', 1200);
+  } else if (!onAuthPage) {
+    window.location.href = 'auth.html';
+  }
+
+  throw new Error('Unauthorized');
+}
+
   if (!res.ok) throw new Error(data.error || 'Something went wrong');
   return data;
 }
@@ -38,7 +60,72 @@ const api = {
   delete: (path) => request('DELETE', path),
 };
 
-// ─── TOAST ───
+async function initNav() {
+  const navRight = document.querySelector('.nav-right');
+  if (!navRight) return;
+
+  const loggedIn = await auth.isLoggedIn();
+  const user = auth.getUser();
+
+  if (loggedIn && user) {
+    const initials = user.name
+      ? user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+      : user.email[0].toUpperCase();
+
+    navRight.innerHTML = `
+      <div class="nav-user">
+        <div class="nav-avatar">${initials}</div>
+        <span style="color:var(--text2); font-size:0.82rem;">
+          ${user.name || user.email}
+        </span>
+      </div>
+      ${user.role === 'organizer'
+        ? `<a href="organizer.html" class="btn btn-ghost btn-sm">My Events</a>`
+        : ''}
+      <a href="bookings.html" class="btn btn-outline btn-sm">Bookings</a>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sign Out</button>
+    `;
+  } else {
+    navRight.innerHTML = `
+      <a href="auth.html" class="btn btn-outline btn-sm">Sign In</a>
+      <a href="auth.html?tab=register" class="btn btn-primary btn-sm">Get Started</a>
+    `;
+  }
+
+  const currentPage = location.pathname.split('/').pop();
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href === currentPage || (currentPage === '' && href === 'index.html')) {
+      a.classList.add('active');
+    }
+  });
+}
+
+async function logout() {
+  try {
+    await api.post('/auth/logout'); 
+  } catch (_) {}
+
+  auth.clear();
+  toast('Signed out successfully', 'success');
+
+  setTimeout(() => window.location.href = 'index.html', 500);
+}
+
+
+async function requireAuth(redirect = true) {
+  const loggedIn = await auth.isLoggedIn();
+
+  if (!loggedIn) {
+    if (redirect) {
+      window.location.href =
+        `auth.html?redirect=${encodeURIComponent(location.href)}`;
+    }
+    return false;
+  }
+  return true;
+}
+
 function toast(msg, type = 'info') {
   let container = document.getElementById('toast-container');
   if (!container) {
@@ -46,82 +133,80 @@ function toast(msg, type = 'info') {
     container.id = 'toast-container';
     document.body.appendChild(container);
   }
+
+  const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;
-  const icons = { success: '✓', error: '✕', info: 'ℹ' };
-  el.innerHTML = `<span>${icons[type] || ''}</span> ${msg}`;
+  el.innerHTML = `<span>${icons[type] || 'ℹ'}</span><span>${msg}</span>`;
+
   container.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(100%)'; el.style.transition = '0.3s'; setTimeout(() => el.remove(), 300); }, 3000);
+
+  setTimeout(() => {
+    el.style.transition = 'all 0.3s ease';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(120%)';
+    setTimeout(() => el.remove(), 300);
+  }, 3500);
 }
 
-// ─── NAV ───
-function initNav() {
-  const user = auth.getUser();
-  const navAuth = document.querySelector('.nav-auth');
-  const navInfo = document.getElementById('nav-user-info');
+function openModal(id) {
+  document.getElementById(id)?.classList.add('open');
+}
 
-  if (!navAuth) return;
+function closeModal(id) {
+  document.getElementById(id)?.classList.remove('open');
+}
 
-  if (auth.isLoggedIn() && user) {
-    if (navInfo) { navInfo.style.display = 'block'; navInfo.textContent = user.name || user.email; }
-    navAuth.innerHTML = `
-      <a href="bookings.html" class="btn btn-outline btn-sm">My Bookings</a>
-      <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
-    `;
-  } else {
-    navAuth.innerHTML = `<a href="auth.html" class="btn btn-gold btn-sm">Sign In</a>`;
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.classList.remove('open');
   }
-}
+});
 
-async function logout() {
-  try {
-    await api.post('/auth/logout');
-  } catch (_) {}
-  auth.clear();
-  window.location.href = 'index.html';
-}
 
-// ─── FORMAT HELPERS ───
 function formatDate(d) {
-  return new Date(d).toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  if (!d) return 'TBA';
+  return new Date(d).toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
 }
 
 function formatTime(d) {
-  return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  if (!d) return '';
+  return new Date(d).toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 function formatCurrency(n) {
   return '₹' + Number(n).toLocaleString('en-IN');
 }
 
+function formatDuration(ms) {
+  const totalSecs = Math.max(0, Math.floor(ms / 1000));
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  return `${mins}m ${String(secs).padStart(2, '0')}s`;
+}
+
 function statusBadge(status) {
   const map = {
     confirmed: 'badge-green',
-    pending: 'badge-blue',
+    pending: 'badge-orange',
     cancelled: 'badge-red',
-    refunded: 'badge-muted',
+    refunded: 'badge-grey',
+    published: 'badge-green',
+    draft: 'badge-grey',
+    completed: 'badge-purple',
   };
-  return `<span class="badge ${map[status] || 'badge-muted'}">${status}</span>`;
+  return `<span class="badge ${map[status] || 'badge-grey'}">${status}</span>`;
 }
 
-// ─── MODAL ───
-function openModal(id) { document.getElementById(id)?.classList.add('open'); }
-function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
+const CAT_COLORS = ['#6c3fc5', '#0891b2', '#059669', '#dc2626', '#d97706', '#7c3aed'];
 
-document.addEventListener('click', (e) => {
-  if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('open');
-  }
-});
-
-// ─── REQUIRE AUTH ───
-function requireAuth() {
-  if (!auth.isLoggedIn()) {
-    window.location.href = 'auth.html';
-    return false;
-  }
-  return true;
-}
-
-// ─── INIT ───
 document.addEventListener('DOMContentLoaded', initNav);

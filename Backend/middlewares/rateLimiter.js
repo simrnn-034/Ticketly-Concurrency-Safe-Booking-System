@@ -25,3 +25,12 @@ export const holdLimiter = rateLimit({
   legacyHeaders: false
 });
 
+export const aiLimiter = rateLimit({
+  windowMs: 60 *60 * 1000,
+  max: 10,
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: { error: 'Too many AI requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+

@@ -8,63 +8,656 @@
 </head>
 <body>
 
+<div id="token-expiry-bar"></div>
+
 <nav>
-  <a href="index.html" class="nav-logo">TICKET<span>GUARD</span></a>
+  <a href="index.html" class="nav-logo">Ticket<span>Guard</span></a>
   <div class="nav-links">
     <a href="index.html">Events</a>
     <a href="bookings.html">My Bookings</a>
   </div>
-  <div style="display:flex; gap:0.75rem; align-items:center;">
-    <span id="nav-user-info" style="font-size:0.8rem; color:var(--muted);"></span>
-    <div class="nav-auth"></div>
-  </div>
+  <div class="nav-right"></div>
 </nav>
 
-<div class="container page" id="page-content">
-  <div class="skeleton" style="height:120px; border-radius:8px; margin-bottom:2rem;"></div>
-  <div style="display:grid; grid-template-columns:1fr 360px; gap:2rem;">
-    <div class="skeleton" style="height:500px; border-radius:8px;"></div>
-    <div class="skeleton" style="height:300px; border-radius:8px;"></div>
+<div class="container page" id="page">
+  <div style="display:flex; align-items:center; gap:0.75rem; color:var(--muted); font-size:0.85rem;">
+    <span class="spinner"></span> Loading event...
   </div>
 </div>
 
-<!-- CONFIRM BOOKING MODAL -->
-<div class="modal-overlay" id="confirm-modal">
+<!-- PAYMENT MODAL -->
+<div class="modal-overlay" id="payment-modal">
   <div class="modal">
-    <h2 class="modal-title">CONFIRM BOOKING</h2>
-    <p class="modal-subtitle">Review your selected seats before confirming</p>
-
-    <div id="modal-seats-list" style="margin-bottom:1rem;"></div>
-
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem; background:var(--bg3); border-radius:4px; margin-bottom:1rem;">
-      <span style="font-size:0.85rem; color:var(--muted);">Total Amount</span>
-      <span style="font-family:'DM Mono',monospace; font-size:1.1rem; color:var(--gold);" id="modal-total"></span>
+    <div class="modal-icon">💳</div>
+    <h2 class="modal-title">Complete Payment</h2>
+    <p class="modal-subtitle">Review your booking and proceed to secure payment</p>
+    <div id="payment-seats-list" style="margin-bottom:1rem;"></div>
+    <div style="background:var(--off); border:1px solid var(--border); border-radius:8px; padding:0.85rem 1rem; display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <span style="font-size:0.82rem; font-weight:600; color:var(--text2);">Total Amount</span>
+      <span id="payment-total" style="font-family:'DM Mono',monospace; font-size:1.1rem; color:var(--violet); font-weight:600;"></span>
     </div>
-
-    <div style="font-size:0.75rem; color:var(--muted); margin-bottom:1rem;">
-      ⚡ Your seats are held for 10 minutes. Complete the booking before the hold expires.
+    <div class="info-box info-box-purple" style="margin-bottom:1rem;">
+      ⏱ Your seats are held. Complete payment before the hold expires.
     </div>
-
     <div class="modal-actions">
-      <button class="btn btn-gold btn-full" id="confirm-btn" onclick="confirmBooking()">Confirm Booking</button>
-      <button class="btn btn-outline" onclick="closeModal('confirm-modal')">Cancel</button>
+      <button class="btn btn-primary btn-full" id="pay-btn" onclick="openRazorpay()">Pay Now</button>
+      <button class="btn btn-outline" onclick="closeModal('payment-modal')">Pay Later</button>
     </div>
   </div>
 </div>
 
-<!-- ORGANIZER PANEL MODAL -->
-<div class="modal-overlay" id="organizer-modal">
+<!-- CANCEL PENDING MODAL -->
+<div class="modal-overlay" id="cancel-pending-modal">
   <div class="modal">
-    <h2 class="modal-title">EVENT ACTIONS</h2>
-    <p class="modal-subtitle" id="org-modal-subtitle"></p>
-    <div id="org-actions" style="display:flex; flex-direction:column; gap:0.75rem; margin-top:1rem;"></div>
-    <div class="modal-actions" style="margin-top:1rem;">
-      <button class="btn btn-outline btn-full" onclick="closeModal('organizer-modal')">Close</button>
+    <div class="modal-icon" style="background:#fef2f2;">❌</div>
+    <h2 class="modal-title">Cancel Pending Booking?</h2>
+    <p class="modal-subtitle">This will cancel your pending booking and release the held seats back so others can book them.</p>
+    <div class="info-box info-box-red" style="margin-bottom:1rem;">⚠️ This cannot be undone. Your seat selection will be lost.</div>
+    <div class="modal-actions">
+      <button class="btn btn-danger-filled btn-full" id="cancel-pending-btn" onclick="confirmCancelPending()">Yes, Cancel & Release Seats</button>
+      <button class="btn btn-outline" onclick="closeModal('cancel-pending-modal')">Keep My Seats</button>
     </div>
+  </div>
+</div>
+
+<!-- ORGANIZER MODAL -->
+<div class="modal-overlay" id="org-modal">
+  <div class="modal">
+    <div class="modal-icon">⚙️</div>
+    <h2 class="modal-title" id="org-modal-title">Manage Event</h2>
+    <p class="modal-subtitle" id="org-modal-subtitle"></p>
+    <div id="org-modal-actions" style="display:flex; flex-direction:column; gap:0.75rem;"></div>
+    <div class="modal-actions"><button class="btn btn-outline btn-full" onclick="closeModal('org-modal')">Close</button></div>
   </div>
 </div>
 
 <script src="utils.js"></script>
-<script src="js/event.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const eventId = params.get('id');
+  if (!eventId) window.location.href = 'index.html';
+
+  let event = null;
+  let seatMap = {};
+  let categories = [];
+  let selectedSeats = [];
+  let currentBookingId = null;
+  let currentTotal = 0;
+  let pendingBooking = null;
+  let holdCountdownInterval = null;
+  const CAT_COLORS_MAP = {};
+
+  async function init() {
+    await loadRazorpayScript();
+    try {
+      const [evtData, seatData] = await Promise.all([
+        api.get(`/events/${eventId}`),
+        api.get(`/seats/${eventId}/seatmap`)
+      ]);
+
+      event = evtData.data;
+      seatMap = seatData.data;
+      categories = event.seatCategories || event.categories || [];
+      categories.forEach((cat, i) => { CAT_COLORS_MAP[cat.id] = CAT_COLORS[i % CAT_COLORS.length]; });
+      document.title = `${event.title} — TicketGuard`;
+
+      // fetch pending booking BEFORE render so right panel knows which state to show
+      const loggedIn = await auth.isLoggedIn();
+      if (loggedIn) {
+        try {
+          const activeData = await api.get('/bookings/active');
+          if (activeData.data && activeData.data.id) pendingBooking = activeData.data;
+
+        } catch (_) {}
+      }
+
+      renderPage();
+
+    } catch (err) {
+      document.getElementById('page').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">⚠️</div>
+          <h3>Event Not Found</h3><p>${err.message}</p>
+          <a href="index.html" class="btn btn-outline" style="margin-top:1rem;">← Back</a>
+        </div>`;
+    }
+  }
+
+  function renderPage() {
+    const user = auth.getUser();
+    const isOrganizer = user?.id === event.organizerId;
+    const catEmoji = { Music:'🎵', Sports:'🏆', Comedy:'😄', Theatre:'🎭', Conference:'💼', Other:'📌' };
+
+    document.getElementById('page').innerHTML = `
+      <div style="margin-bottom:1.5rem;">
+        <a href="index.html" style="color:var(--muted); text-decoration:none; font-size:0.82rem;" onmouseover="this.style.color='var(--violet)'" onmouseout="this.style.color='var(--muted)'">← Back to Events</a>
+      </div>
+
+      <div id="pending-banner" style="display:none; margin-bottom:1.5rem;"></div>
+
+      <div style="margin-bottom:2rem;">
+        <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap;">
+          <span class="event-category-tag">${catEmoji[event.category] || '📌'} ${event.category || 'Event'}</span>
+          ${statusBadge(event.status)}
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap;">
+          <div>
+            <h1 style="font-family:'Playfair Display',serif; font-size:clamp(1.75rem,4vw,2.75rem); font-weight:700; color:var(--text); letter-spacing:-0.5px; line-height:1.1; margin-bottom:0.6rem;">${event.title}</h1>
+            <div style="display:flex; gap:1.5rem; flex-wrap:wrap; color:var(--muted); font-size:0.85rem;">
+              <span>📍 ${event.venue || 'TBA'}</span>
+              <span>📅 ${formatDate(event.eventDate || event.date_time)}</span>
+              <span>🕐 ${formatTime(event.eventDate || event.date_time)}</span>
+              <span>👤 ${event.organizer?.name || 'Organizer'}</span>
+            </div>
+            ${event.description ? `<p style="color:var(--text2); margin-top:0.85rem; max-width:580px; font-size:0.88rem; line-height:1.7;">${event.description}</p>` : ''}
+          </div>
+          ${isOrganizer ? `<button class="btn btn-outline btn-sm" onclick="openOrgModal()">⚙ Manage</button>` : ''}
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:2rem;">
+        ${categories.map((cat, i) => `
+          <div class="category-pill" style="cursor:default;">
+            <div class="cat-dot" style="background:${CAT_COLORS[i % CAT_COLORS.length]};"></div>
+            ${cat.categoryName || cat.name}
+            <span style="font-family:'DM Mono',monospace; font-size:0.72rem; color:var(--violet);">${formatCurrency(cat.price)}</span>
+          </div>`).join('')}
+      </div>
+
+      <div class="two-col">
+        <div>
+          <p style="font-size:0.72rem; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:0.85rem;">Seat Map</p>
+          <div class="seatmap-wrapper">
+            <div class="stage">STAGE</div>
+            <div id="seat-rows"></div>
+            <div class="seatmap-legend">
+              <div class="legend-item"><div class="legend-dot" style="background:white; border:1.5px solid var(--border2);"></div> Available</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--violet);"></div> Selected</div>
+              <div class="legend-item"><div class="legend-dot" style="background:#fef9c3; border:1.5px solid #fde047;"></div> Held</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--surface); opacity:0.5;"></div> Booked</div>
+            </div>
+          </div>
+        </div>
+        <div id="right-panel"></div>
+      </div>`;
+
+    renderSeatMap();
+    renderRightPanel();
+    if (pendingBooking) renderPendingBanner();
+  }
+
+  // ── RIGHT PANEL — 3 states ──
+  function renderRightPanel() {
+    const panel = document.getElementById('right-panel');
+    if (!panel) return;
+
+    // STATE 1: pending booking for THIS event → resume panel
+    if (pendingBooking && String(pendingBooking.eventId) === String(eventId)) {
+      renderResumePanel(panel);
+      return;
+    }
+
+    // STATE 2: pending booking for a DIFFERENT event → blocked
+    if (pendingBooking && String(pendingBooking.eventId) !== String(eventId)) {
+      panel.innerHTML = `
+        <div class="booking-summary">
+          <div class="summary-header" style="background:linear-gradient(135deg,#92400e,#b45309);">
+            <h3>Booking Unavailable</h3>
+            <div style="font-size:0.78rem; opacity:0.8; margin-top:0.2rem;">Another booking in progress</div>
+          </div>
+          <div class="summary-body" style="text-align:center; padding:2rem 1.5rem;">
+            <div style="font-size:2.5rem; margin-bottom:0.75rem;">⚠️</div>
+            <p style="font-size:0.85rem; color:var(--text2); font-weight:600; margin-bottom:0.4rem;">Pending booking for another event</p>
+            <p style="font-size:0.8rem; color:var(--muted); line-height:1.6; margin-bottom:1.25rem;">
+              You have a pending booking for <strong>${pendingBooking.event?.title || 'another event'}</strong>.
+              Complete or cancel it before booking here.
+            </p>
+            <a href="bookings.html" class="btn btn-primary btn-full" style="margin-bottom:0.5rem;">View My Bookings</a>
+            <button class="btn btn-danger btn-full btn-sm" onclick="openModal('cancel-pending-modal')">Cancel That Booking</button>
+          </div>
+        </div>`;
+      return;
+    }
+
+    // STATE 3: no pending booking → seat selection
+    panel.innerHTML = `
+      <div class="booking-summary">
+        <div class="summary-header">
+          <h3>Booking Summary</h3>
+          <div style="font-size:0.78rem; opacity:0.8; margin-top:0.2rem;" id="seat-count-label">No seats selected</div>
+        </div>
+        <div class="summary-body">
+          <div id="summary-seats">
+            <div style="text-align:center; padding:1.5rem 0; color:var(--muted); font-size:0.82rem;">
+              Click available seats<br>to add them here
+            </div>
+          </div>
+          <div id="summary-total-wrap" style="display:none;">
+            <div class="summary-total">
+              <span style="font-size:0.85rem; color:var(--text2);">Total</span>
+              <span class="summary-amount" id="summary-total"></span>
+            </div>
+          </div>
+        </div>
+        <div class="summary-footer" id="summary-footer" style="display:none;">
+          <button class="btn btn-primary btn-full" id="hold-btn" onclick="proceedToHold()">Hold Seats & Pay</button>
+          <button class="btn btn-ghost btn-full btn-sm" style="margin-top:0.4rem; color:var(--muted);" onclick="clearSelection()">Clear Selection</button>
+        </div>
+      </div>`;
+  }
+
+  // ── RESUME PANEL ──
+  function renderResumePanel(panel) {
+    const seats = pendingBooking.bookingSeats || [];
+    const expiresAt = new Date(pendingBooking.expiresAt);
+    currentBookingId = pendingBooking.id;
+    currentTotal = pendingBooking.totalPrice;
+    window._rzpOrderId = pendingBooking.razorpayOrderId;
+
+    panel.innerHTML = `
+      <div class="booking-summary">
+        <div class="summary-header" style="background:linear-gradient(135deg,#4c1d95,#6c3fc5);">
+          <h3>Pending Booking</h3>
+          <div style="font-size:0.78rem; opacity:0.8; margin-top:0.2rem;">Seats held — payment required</div>
+        </div>
+        <div class="summary-body">
+          <p style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-weight:600; margin-bottom:0.6rem;">Your Held Seats</p>
+          ${seats.map(s => `
+            <div class="summary-seat">
+              <span class="summary-seat-label">
+                Row ${s.seat?.rowLabel} · Seat ${s.seat?.seatNumber}
+                <span class="tag" style="margin-left:0.3rem;">${s.seat?.category?.categoryName || ''}</span>
+              </span>
+              <span class="summary-seat-price">${formatCurrency(s.pricePaid)}</span>
+            </div>`).join('')}
+          <div class="summary-total" style="margin-top:0.5rem;">
+            <span style="font-size:0.85rem; color:var(--text2);">Total</span>
+            <span class="summary-amount">${formatCurrency(pendingBooking.totalPrice)}</span>
+          </div>
+          <div style="margin-top:1rem; padding:0.85rem; background:var(--purple-pale); border-radius:8px; text-align:center;">
+            <div style="font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.3rem; font-weight:600;">Hold expires in</div>
+            <div id="resume-countdown" style="font-family:'DM Mono',monospace; font-size:1.1rem; color:var(--violet); font-weight:700;"></div>
+          </div>
+        </div>
+        <div class="summary-footer" style="display:flex; flex-direction:column; gap:0.5rem;">
+          <button class="btn btn-primary btn-full" onclick="openPaymentModal()">💳 Complete Payment</button>
+          <button class="btn btn-danger btn-full btn-sm" onclick="openModal('cancel-pending-modal')">Cancel & Release Seats</button>
+        </div>
+      </div>`;
+
+    startResumeCountdown(expiresAt);
+  }
+
+  // ── PENDING BANNER ──
+  function renderPendingBanner() {
+    const banner = document.getElementById('pending-banner');
+    if (!banner || !pendingBooking) return;
+
+    const isThisEvent = String(pendingBooking.eventId) === String(eventId);
+    banner.style.cssText = `
+      display:flex; gap:1rem; align-items:center; flex-wrap:wrap;
+      background:white; border:1.5px solid var(--purple-light); border-radius:12px;
+      padding:1.25rem 1.5rem; box-shadow:0 4px 16px rgba(108,63,197,0.1);
+      position:relative; overflow:hidden;`;
+
+    banner.innerHTML = `
+      <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,var(--violet),var(--purple-mid));"></div>
+      <div style="width:38px;height:38px;background:var(--purple-pale);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">⏳</div>
+      <div style="flex:1;min-width:180px;">
+        <div style="font-weight:600;color:var(--violet);font-size:0.85rem;margin-bottom:0.1rem;">
+          ${isThisEvent ? 'Pending booking for this event — payment required' : `Pending booking: ${pendingBooking.event?.title || 'another event'}`}
+        </div>
+        <div style="font-size:0.78rem;color:var(--muted);">
+          ${isThisEvent
+            ? `Total: <strong>${formatCurrency(pendingBooking.totalPrice)}</strong> · Complete payment or cancel to rebook`
+            : 'Complete or cancel before selecting seats here'}
+        </div>
+      </div>
+      ${isThisEvent ? `
+        <button class="btn btn-primary btn-sm" onclick="openPaymentModal()">Complete Payment</button>
+        <button class="btn btn-danger btn-sm" onclick="openModal('cancel-pending-modal')">Cancel</button>
+      ` : `<a href="bookings.html" class="btn btn-outline btn-sm">View Bookings</a>`}`;
+  }
+
+  // ── COUNTDOWN ──
+  function startResumeCountdown(expiresAt) {
+    clearInterval(holdCountdownInterval);
+    function update() {
+      const el = document.getElementById('resume-countdown');
+      if (!el) { clearInterval(holdCountdownInterval); return; }
+      const remaining = expiresAt - Date.now();
+      if (remaining <= 0) {
+        clearInterval(holdCountdownInterval);
+        el.textContent = 'Expired';
+        el.style.color = 'var(--red)';
+        setTimeout(async () => {
+          pendingBooking = null;
+          const seatData = await api.get(`/seats/${eventId}/seatmap`).catch(() => ({ data: seatMap }));
+          seatMap = seatData.data;
+          renderRightPanel();
+          renderSeatMap();
+          const b = document.getElementById('pending-banner');
+          if (b) b.style.display = 'none';
+        }, 2000);
+        return;
+      }
+      el.textContent = formatDuration(remaining);
+      el.style.color = remaining < 120000 ? 'var(--red)' : 'var(--violet)';
+    }
+    update();
+    holdCountdownInterval = setInterval(update, 1000);
+  }
+
+  // ── OPEN PAYMENT MODAL ──
+  function openPaymentModal() {
+    if (!pendingBooking) return;
+    const seats = pendingBooking.bookingSeats || [];
+
+
+    document.getElementById('payment-seats-list').innerHTML = seats.map(s => `
+      <div class="summary-seat">
+        <span class="summary-seat-label">
+          Row ${s.seat?.rowLabel} · Seat ${s.seat?.seatNumber}
+          <span class="tag" style="margin-left:0.25rem;">${s.seat?.category?.categoryName || ''}</span>
+        </span>
+        <span class="summary-seat-price">${formatCurrency(s.pricePaid)}</span>
+      </div>`).join('');
+
+    document.getElementById('payment-total').textContent = formatCurrency(pendingBooking.totalPrice);
+    currentBookingId = pendingBooking.id;
+    currentTotal = pendingBooking.totalPrice;
+    window._rzpKeyId = pendingBooking.razorpayKeyId;
+    window._rzpOrderId = pendingBooking.razorpayOrderId;
+    console.log("RZP KEY:", window._rzpKeyId);
+    console.log("RZP ORDER:", window._rzpOrderId);
+    openModal('payment-modal');
+  }
+
+  // ── CANCEL PENDING ──
+  async function confirmCancelPending() {
+    if (!pendingBooking) return;
+    const btn = document.getElementById('cancel-pending-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Cancelling...';
+    try {
+      await api.delete(`/bookings/${pendingBooking.id}`);
+      clearInterval(holdCountdownInterval);
+      toast('Booking cancelled. Seats released.', 'info');
+      closeModal('cancel-pending-modal');
+      closeModal('payment-modal');
+      pendingBooking = null;
+      currentBookingId = null;
+      selectedSeats = [];
+      const b = document.getElementById('pending-banner');
+      if (b) b.style.display = 'none';
+      const seatData = await api.get(`/seats/${eventId}/seatmap`);
+      seatMap = seatData.data;
+      renderSeatMap();
+      renderRightPanel();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Yes, Cancel & Release Seats';
+    }
+  }
+
+  // ── SEAT MAP ──
+  function renderSeatMap() {
+    const container = document.getElementById('seat-rows');
+    if (!container) return;
+    const rows = Object.keys(seatMap).sort();
+    container.innerHTML = rows.map(row => {
+      const seats = [...seatMap[row]].sort((a, b) => a.seatNumber - b.seatNumber);
+      return `
+        <div class="seat-row">
+          <div class="row-label">${row}</div>
+          ${seats.map(seat => {
+            const isSelected = selectedSeats.some(s => s.id === seat.id);
+            const color = CAT_COLORS_MAP[seat.categoryId] || '#6c3fc5';
+            let cls = 'seat ';
+            let style = '';
+            let disabled = false;
+            let title = '';
+
+            if (isSelected) {
+              cls += 'seat-selected'; style = `background:${color}; border-color:${color};`;
+            } else if (seat.status === 'booked') {
+              cls += 'seat-booked'; disabled = true;
+            } else if (seat.status === 'blocked') {
+              cls += 'seat-blocked'; disabled = true;
+            } else if (seat.status === 'held') {
+              cls += 'seat-held'; disabled = true; title = 'Currently held';
+            } else {
+              cls += 'seat-available';
+              const cat = categories.find(c => c.id === seat.categoryId);
+              title = `Row ${row} · Seat ${seat.seatNumber} · ${cat?.categoryName || ''} · ${formatCurrency(cat?.price || 0)}`;
+            }
+            return `<button class="${cls}" style="${style}" title="${title}" ${disabled ? 'disabled' : ''} onclick="toggleSeat('${seat.id}','${row}',${seat.seatNumber},'${seat.categoryId}')"></button>`;
+          }).join('')}
+          <div class="row-label"></div>
+        </div>`;
+    }).join('');
+  }
+
+  function toggleSeat(seatId, row, num, catId) {
+    
+    if (!auth.getUser()) {
+      toast('Please sign in to select seats', 'warning');
+      setTimeout(() => window.location.href = `auth.html?redirect=${encodeURIComponent(location.href)}`, 900);
+      return;
+    }
+    if (pendingBooking) {
+      const msg = String(pendingBooking.eventId) === String(eventId)
+        ? 'Complete or cancel your pending booking first'
+        : 'Cancel your pending booking for another event first';
+      toast(msg, 'info');
+      return;
+    }
+    const cat = categories.find(c => c.id === catId);
+    const idx = selectedSeats.findIndex(s => s.id === seatId);
+    if (idx === -1) {
+      if (selectedSeats.length >= 8) { toast('Maximum 8 seats per booking', 'warning'); return; }
+      selectedSeats.push({ id: seatId, row, num, catId, price: Number(cat?.price || 0), catName: cat?.categoryName || cat?.name || '' });
+    } else {
+      selectedSeats.splice(idx, 1);
+    }
+    updateSummary();
+    renderSeatMap();
+  }
+
+  function updateSummary() {
+    const sumSeats = document.getElementById('summary-seats');
+    const sumTotalWrap = document.getElementById('summary-total-wrap');
+    const sumTotal = document.getElementById('summary-total');
+    const sumFooter = document.getElementById('summary-footer');
+    const countLabel = document.getElementById('seat-count-label');
+    if (!sumSeats) return;
+    if (!selectedSeats.length) {
+      sumSeats.innerHTML = `<div style="text-align:center; padding:1.5rem 0; color:var(--muted); font-size:0.82rem;">Click available seats<br>to add them here</div>`;
+      if (sumTotalWrap) sumTotalWrap.style.display = 'none';
+      if (sumFooter) sumFooter.style.display = 'none';
+      if (countLabel) countLabel.textContent = 'No seats selected';
+      return;
+    }
+    const total = selectedSeats.reduce((s, seat) => s + seat.price, 0);
+    if (countLabel) countLabel.textContent = `${selectedSeats.length} seat${selectedSeats.length > 1 ? 's' : ''} selected`;
+    sumSeats.innerHTML = selectedSeats.map(s => `
+      <div class="summary-seat">
+        <span class="summary-seat-label">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${CAT_COLORS_MAP[s.catId]||'#6c3fc5'};margin-right:0.3rem;"></span>
+          ${s.row}${s.num} <span class="tag" style="margin-left:0.3rem;">${s.catName}</span>
+        </span>
+        <span class="summary-seat-price">${formatCurrency(s.price)}</span>
+      </div>`).join('');
+    if (sumTotalWrap) { sumTotalWrap.style.display = 'block'; sumTotal.textContent = formatCurrency(total); }
+    if (sumFooter) sumFooter.style.display = 'block';
+  }
+
+  function clearSelection() { selectedSeats = []; updateSummary(); renderSeatMap(); }
+
+  // ── HOLD & INITIATE ──
+  async function proceedToHold() {
+    if (!selectedSeats.length) return;
+    const btn = document.getElementById('hold-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Holding seats...';
+    try {
+      await api.post(`/seats/${eventId}/hold`, { seatIds: selectedSeats.map(s => s.id) });
+      const bookingData = await api.post('/bookings/initiate', { eventId, seatIds: selectedSeats.map(s => s.id) });
+      console.log('Booking initiated:', bookingData);
+      const booking = bookingData.data.booking || bookingData.data;
+
+currentBookingId = booking.id;
+currentTotal = booking.totalPrice || bookingData.data.totalAmount;
+
+window._rzpOrderId = booking.razorpayOrderId || bookingData.data.razorpayOrderId;
+window._rzpKeyId = booking.razorpayKeyId || bookingData.data.razorpayKeyId;
+
+      // fetch full pending booking for resume panel
+      const activeData = await api.get('/bookings/active');
+      console.log('Active booking:', activeData);
+      if (activeData.data) pendingBooking = activeData.data.booking;
+      if (pendingBooking.razorpayKeyId) {
+    window._rzpKeyId = pendingBooking.razorpayKeyId;
+  }
+
+      // refresh seatmap
+      const seatData = await api.get(`/seats/${eventId}/seatmap`);
+      seatMap = seatData.data;
+      selectedSeats = [];
+
+      renderPendingBanner();
+      renderRightPanel();
+      renderSeatMap();
+
+      // open payment modal immediately
+      openPaymentModal();
+      toast('Seats held for 10 minutes. Complete payment now.', 'success');
+    } catch (err) {
+      console.error('Error holding seats:', err);
+      toast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Hold Seats & Pay';
+    }
+  }
+
+  // ── RAZORPAY ──
+  function openRazorpay() {
+  if (typeof Razorpay === 'undefined') {
+    toast('Payment system loading, please try again in a second.', 'warning');
+    return;
+  }
+  const user = auth.getUser();
+  const keyId = window._rzpKeyId;
+  const orderId = window._rzpOrderId || pendingBooking?.razorpayOrderId;
+
+  if (!keyId || !orderId) {
+    toast('Payment details missing. Please refresh and try again.', 'error');
+    return;
+  }
+  console.log("KEY:", keyId);
+console.log("ORDER:", orderId);
+console.log("AMOUNT:", currentTotal);
+
+  const options = {
+    key: keyId,
+    amount: currentTotal * 100, 
+    currency: 'INR',
+    name: 'TicketGuard',
+    description: event.title,
+    order_id: orderId,  
+    prefill: { name: user?.name || '', email: user?.email || '' },
+    theme: { color: '#3b1fa3' },
+    handler: async (response) => { 
+      console.log("✅ Handler fired");
+    console.log("Response:", response);
+       await confirmBooking(response); 
+    },
+    modal: { ondismiss: () => { toast('Payment cancelled. Your seats are still held.', 'info'); } }
+  };
+  console.log("Opening Razorpay with options:", options);
+  new Razorpay(options).open();
+  closeModal('payment-modal');
+}
+  // ── CONFIRM ──
+  async function confirmBooking(paymentResponse) {
+    try {
+      
+      console.log("BOOKING ID:", currentBookingId);
+console.log("PAYMENT RESPONSE:", paymentResponse);
+      await api.post('/bookings/confirm', {
+        bookingId: currentBookingId,
+        razorpayPaymentId: paymentResponse.razorpay_payment_id,
+        razorpayOrderId: paymentResponse.razorpay_order_id,
+        razorpaySignature: paymentResponse.razorpay_signature
+      });
+      clearInterval(holdCountdownInterval);
+      pendingBooking = null;
+      currentBookingId = null;
+      const b = document.getElementById('pending-banner');
+      if (b) b.style.display = 'none';
+      toast('Booking confirmed! 🎉', 'success');
+      const seatData = await api.get(`/seats/${eventId}/seatmap`);
+      seatMap = seatData.data;
+      renderSeatMap();
+      renderRightPanel();
+      setTimeout(() => window.location.href = 'bookings.html', 1500);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  // ── ORGANIZER ──
+  async function openOrgModal() {
+    document.getElementById('org-modal-title').textContent = event.title;
+    document.getElementById('org-modal-subtitle').textContent = `Status: ${event.status}`;
+    const actions = document.getElementById('org-modal-actions');
+    actions.innerHTML = '';
+    if (event.status === 'draft') {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary btn-full';
+      btn.textContent = '🚀 Publish Event';
+      btn.onclick = async () => {
+        try {
+          await api.patch(`/events/${eventId}/publish`);
+          toast('Event published!', 'success');
+          closeModal('org-modal');
+          const d = await api.get(`/events/${eventId}`);
+          event = d.data; renderPage();
+        } catch (err) { toast(err.message, 'error'); }
+      };
+      actions.appendChild(btn);
+    }
+    if (event.status === 'published') {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-danger-filled btn-full';
+      btn.textContent = '✕ Cancel Event';
+      btn.onclick = async () => {
+        if (!confirm('Cancel this event? All confirmed bookings will be cancelled.')) return;
+        try {
+          await api.patch(`/events/${eventId}/cancel`);
+          toast('Event cancelled', 'info');
+          closeModal('org-modal');
+          window.location.href = 'index.html';
+        } catch (err) { toast(err.message, 'error'); }
+      };
+      actions.appendChild(btn);
+    }
+    openModal('org-modal');
+  }
+
+
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (typeof Razorpay !== 'undefined') { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = resolve;
+    document.head.appendChild(s);
+  });
+}
+  init();
+</script>
 </body>
 </html>

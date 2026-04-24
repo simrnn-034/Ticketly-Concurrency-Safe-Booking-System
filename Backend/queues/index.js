@@ -1,9 +1,7 @@
 import {Queue} from 'bullmq';
-const connection = {
-    host: process.env.REDIS_HOST,
-    port : process.env.REDIS_PORT
-};
+import {bullConnection} from '../config/redis.js';
 
-export const notificationQueue = new Queue('notification',{connection});
-export const ticketQueue = new Queue('tickets', {connection});
-export const eventQueue = new Queue('events',{connection});
+export const notificationQueue = new Queue('notification',{connection: bullConnection});
+export const ticketQueue = new Queue('tickets', {connection: bullConnection});
+export const eventQueue = new Queue('events',{connection: bullConnection});
+export const bookingQueue = new Queue('bookings',{connection: bullConnection});

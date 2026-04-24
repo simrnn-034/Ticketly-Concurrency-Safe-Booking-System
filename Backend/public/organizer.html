@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Events — TicketGuard</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .ai-desc-wrapper { position:relative; }
+    .ai-gen-bar {
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:0.4rem;
+    }
+    .ai-btn {
+      display:inline-flex; align-items:center; gap:0.3rem;
+      padding:0.25rem 0.65rem; border-radius:20px;
+      background:linear-gradient(135deg,var(--violet),var(--purple-mid));
+      color:white; font-size:0.72rem; font-weight:600; letter-spacing:0.3px;
+      border:none; cursor:pointer; transition:opacity 0.2s; font-family:'DM Sans',sans-serif;
+    }
+    .ai-btn:hover { opacity:0.88; }
+    .ai-btn:disabled { opacity:0.45; cursor:not-allowed; }
+    .ai-generating-overlay {
+      position:absolute; inset:0; background:rgba(255,255,255,0.85);
+      display:none; align-items:center; justify-content:center; gap:0.6rem;
+      border-radius:8px; font-size:0.82rem; color:var(--violet); font-weight:500;
+      z-index:2;
+    }
+    .ai-generating-overlay.show { display:flex; }
+  </style>
+</head>
+<body>
+
+<div id="token-expiry-bar"></div>
+
+<nav>
+  <a href="index.html" class="nav-logo">Ticket<span>Guard</span></a>
+  <div class="nav-links">
+    <a href="index.html">Events</a>
+    <a href="organizer.html" class="active">My Events</a>
+  </div>
+  <div class="nav-right"></div>
+</nav>
+
+<div class="container page">
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:1rem; margin-bottom:2rem;">
+    <div>
+      <div class="page-eyebrow">// Organizer Dashboard</div>
+      <h1 class="page-title">My Events</h1>
+      <p class="page-subtitle">Create, publish and manage your events</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('create-modal')">+ Create Event</button>
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterEvents('all', this)">All</button>
+    <button class="filter-btn" onclick="filterEvents('draft', this)">📝 Draft</button>
+    <button class="filter-btn" onclick="filterEvents('published', this)">🟢 Published</button>
+    <button class="filter-btn" onclick="filterEvents('completed', this)">✅ Completed</button>
+    <button class="filter-btn" onclick="filterEvents('cancelled', this)">❌ Cancelled</button>
+  </div>
+
+  <div id="events-list">
+    <div style="display:flex; align-items:center; gap:0.75rem; color:var(--muted); font-size:0.85rem; padding:1rem 0;">
+      <span class="spinner"></span> Loading your events...
+    </div>
+  </div>
+</div>
+
+<!-- CREATE EVENT MODAL -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal" style="max-width:640px; max-height:88vh; overflow-y:auto;">
+    <div class="modal-icon">🎭</div>
+    <h2 class="modal-title">Create New Event</h2>
+    <p class="modal-subtitle">Fill in the details and define your seating layout</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Event Title *</label>
+        <input type="text" id="ce-title" placeholder="Arijit Singh Live 2025" />
+      </div>
+      <div class="form-group">
+        <label>Venue *</label>
+        <input type="text" id="ce-venue" placeholder="DY Patil Stadium, Mumbai" />
+      </div>
+      <div class="form-group">
+        <label>Date & Time *</label>
+        <input type="datetime-local" id="ce-date" />
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Category *</label>
+        <select id="ce-category">
+          <option value="Music">🎵 Music</option>
+          <option value="Sports">🏆 Sports</option>
+          <option value="Comedy">😄 Comedy</option>
+          <option value="Theatre">🎭 Theatre</option>
+          <option value="Conference">💼 Conference</option>
+          <option value="Other">📌 Other</option>
+        </select>
+      </div>
+
+      <!-- AI DESCRIPTION -->
+      <div class="form-group" style="grid-column:1/-1;">
+        <div class="ai-gen-bar">
+          <label style="margin:0;">Description</label>
+          <button class="ai-btn" id="ai-desc-btn" onclick="generateDescription()">
+            ✨ Generate with AI
+          </button>
+        </div>
+        <div class="ai-desc-wrapper">
+          <textarea id="ce-desc" rows="4" placeholder="Describe your event to attract more attendees... or let AI write it for you."></textarea>
+          <div class="ai-generating-overlay" id="ai-overlay">
+            <span class="spinner"></span> AI is writing your description...
+          </div>
+        </div>
+        <div style="font-size:0.72rem; color:var(--muted); margin-top:0.3rem;">
+          💡 Fill in title, venue and category first for a better AI description
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <p style="font-size:0.72rem; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:0.75rem;">Seating Categories</p>
+
+    <div id="cat-container">
+      <div class="cat-entry" style="background:var(--off); border:1px solid var(--border); border-radius:8px; padding:1rem; margin-bottom:0.75rem;">
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.6rem; margin-bottom:0.6rem;">
+          <div class="form-group" style="margin:0;"><label>Name</label><input class="cat-name" type="text" placeholder="VIP" /></div>
+          <div class="form-group" style="margin:0;"><label>Price (₹)</label><input class="cat-price" type="number" placeholder="5000" /></div>
+          <div class="form-group" style="margin:0;"><label>Seats/Row</label><input class="cat-spr" type="number" placeholder="10" /></div>
+        </div>
+        <div class="form-group" style="margin:0;"><label>Rows (comma separated)</label><input class="cat-rows" type="text" placeholder="A, B, C" /></div>
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="addCat()" style="margin-bottom:1rem; color:var(--violet);">+ Add Category</button>
+
+    <div id="create-error" style="display:none;" class="info-box info-box-red"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-full" id="create-btn" onclick="submitCreateEvent()">Create Event</button>
+      <button class="btn btn-outline" onclick="closeModal('create-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- PUBLISH MODAL -->
+<div class="modal-overlay" id="publish-modal">
+  <div class="modal">
+    <div class="modal-icon">🚀</div>
+    <h2 class="modal-title">Publish Event</h2>
+    <p class="modal-subtitle" id="publish-subtitle"></p>
+    <div class="info-box info-box-purple" style="margin-bottom:1rem;">
+      Once published, the event will be visible to all users and tickets can be booked immediately.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-full" id="publish-btn">Publish Now</button>
+      <button class="btn btn-outline" onclick="closeModal('publish-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- CANCEL EVENT MODAL -->
+<div class="modal-overlay" id="cancel-event-modal">
+  <div class="modal">
+    <div class="modal-icon" style="background:#fef2f2;">⚠️</div>
+    <h2 class="modal-title">Cancel Event</h2>
+    <p class="modal-subtitle" id="cancel-event-subtitle"></p>
+    <div class="info-box info-box-red" style="margin-bottom:1rem;">
+      This will cancel all confirmed bookings and trigger refunds. This cannot be undone.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger-filled btn-full" id="cancel-event-btn">Yes, Cancel Event</button>
+      <button class="btn btn-outline" onclick="closeModal('cancel-event-modal')">Go Back</button>
+    </div>
+  </div>
+</div>
+
+<script src="utils.js"></script>
+<script>
+  let allEvents = [];
+  let currentFilter = 'all';
+
+  async function loadEvents() {
+    if (!(await requireAuth())) return;
+    const user = auth.getUser();
+    if (user?.role !== 'organizer') { window.location.href = 'index.html'; return; }
+
+    try {
+      const data = await api.get('/events/organizer');
+      allEvents = data.data || [];
+      renderEvents();
+    } catch (err) {
+      document.getElementById('events-list').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">⚠️</div><h3>Could Not Load Events</h3><p>${err.message}</p>
+        </div>`;
+    }
+  }
+
+  function filterEvents(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderEvents();
+  }
+
+  function renderEvents() {
+    const container = document.getElementById('events-list');
+    const filtered = currentFilter === 'all' ? allEvents : allEvents.filter(e => e.status === currentFilter);
+
+    if (!filtered.length) {
+      const msgs = {
+        all: { icon:'🎭', title:'No Events Yet', msg:'Create your first event to get started.' },
+        draft: { icon:'📝', title:'No Draft Events', msg:'' },
+        published: { icon:'🟢', title:'No Published Events', msg:'Publish a draft to make it live.' },
+        completed: { icon:'✅', title:'No Completed Events', msg:'' },
+        cancelled: { icon:'❌', title:'No Cancelled Events', msg:'' }
+      };
+      const m = msgs[currentFilter] || msgs.all;
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">${m.icon}</div><h3>${m.title}</h3><p>${m.msg}</p>
+          ${currentFilter === 'all' ? `<button class="btn btn-primary" style="margin-top:1.5rem;" onclick="openModal('create-modal')">Create First Event</button>` : ''}
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = filtered.map(e => {
+      const cats = e.seatCategories || e.categories || [];
+      const minPrice = cats.length ? Math.min(...cats.map(c => Number(c.price))) : 0;
+      const totalSeats = e.totalSeats || e.total_seats || 0;
+      return `
+        <div class="booking-item">
+          <div class="booking-item-accent"></div>
+          <div class="booking-item-body">
+            <div style="flex:1;">
+              <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem; flex-wrap:wrap;">
+                ${statusBadge(e.status)}
+                <span class="event-category-tag" style="margin:0;">${e.category || 'Event'}</span>
+              </div>
+              <div class="booking-event-name">${e.title}</div>
+              <div class="booking-meta">
+                📅 ${formatDate(e.eventDate || e.date_time)} · 🕐 ${formatTime(e.eventDate || e.date_time)}<br>
+                📍 ${e.venue || 'TBA'} · 🪑 ${totalSeats} seats · 💰 From ${formatCurrency(minPrice)}
+              </div>
+              ${cats.length ? `
+                <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.6rem;">
+                  ${cats.map(cat => `
+                    <span style="font-size:0.7rem; padding:0.15rem 0.5rem; background:var(--surface); border:1px solid var(--border); border-radius:3px; color:var(--text2); font-family:'DM Mono',monospace;">
+                      ${cat.categoryName || cat.name} · ${formatCurrency(cat.price)}
+                    </span>`).join('')}
+                </div>` : ''}
+            </div>
+            <div style="display:flex; flex-direction:column; gap:0.5rem; align-items:flex-end; flex-shrink:0;">
+              <a href="event.html?id=${e.id}" class="btn btn-outline btn-sm">View</a>
+              ${e.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="initPublish('${e.id}', '${e.title.replace(/'/g,"\\'")}')">🚀 Publish</button>` : ''}
+              ${e.status === 'published' ? `<button class="btn btn-danger btn-sm" onclick="initCancelEvent('${e.id}', '${e.title.replace(/'/g,"\\'")}')">Cancel</button>` : ''}
+            </div>
+          </div>
+          <div class="booking-item-footer">
+            <span style="font-size:0.75rem; color:var(--muted);">Created ${formatDate(e.createdAt)}</span>
+            <span style="font-size:0.75rem; color:var(--muted);">${cats.length} categor${cats.length === 1 ? 'y' : 'ies'}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── PUBLISH ──
+  function initPublish(eventId, title) {
+    document.getElementById('publish-subtitle').textContent = `Ready to go live: "${title}"`;
+    const btn = document.getElementById('publish-btn');
+    btn.onclick = () => publishEvent(eventId);
+    openModal('publish-modal');
+  }
+
+  async function publishEvent(eventId) {
+    const btn = document.getElementById('publish-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Publishing...';
+    try {
+      await api.patch(`/events/${eventId}/publish`);
+      toast('Event published! 🚀', 'success');
+      closeModal('publish-modal');
+      await loadEvents();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Publish Now';
+    }
+  }
+
+  // ── CANCEL EVENT ──
+  function initCancelEvent(eventId, title) {
+    document.getElementById('cancel-event-subtitle').textContent = `Cancel "${title}"?`;
+    const btn = document.getElementById('cancel-event-btn');
+    btn.onclick = () => cancelEvent(eventId);
+    openModal('cancel-event-modal');
+  }
+
+  async function cancelEvent(eventId) {
+    const btn = document.getElementById('cancel-event-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Cancelling...';
+    try {
+      await api.patch(`/events/${eventId}/cancel`);
+      toast('Event cancelled. All bookings cancelled.', 'info');
+      closeModal('cancel-event-modal');
+      await loadEvents();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Yes, Cancel Event';
+    }
+  }
+
+  // ── AI DESCRIPTION GENERATOR ──
+  async function generateDescription() {
+    const title = document.getElementById('ce-title').value.trim();
+    if (!title) {
+      toast('Please enter an event title first', 'warning');
+      document.getElementById('ce-title').focus();
+      return;
+    }
+
+    const btn = document.getElementById('ai-desc-btn');
+    const overlay = document.getElementById('ai-overlay');
+    btn.disabled = true;
+    overlay.classList.add('show');
+
+    try {
+      const data = await api.post('/ai/generate-description', {
+        title,
+        venue: document.getElementById('ce-venue').value.trim() || undefined,
+        category: document.getElementById('ce-category').value,
+        artistName: title,
+        eventDate: document.getElementById('ce-date').value || undefined
+      });
+
+      const description = data.data?.description || data.data || '';
+      document.getElementById('ce-desc').value = description;
+      toast('Description generated! Feel free to edit it.', 'success');
+    } catch (err) {
+      toast(err.message || 'AI generation failed', 'error');
+    } finally {
+      btn.disabled = false;
+      overlay.classList.remove('show');
+    }
+  }
+
+  // ── CREATE EVENT ──
+  function addCat() {
+    const div = document.createElement('div');
+    div.className = 'cat-entry';
+    div.style.cssText = 'background:var(--off); border:1px solid var(--border); border-radius:8px; padding:1rem; margin-bottom:0.75rem; position:relative;';
+    div.innerHTML = `
+      <button onclick="this.parentElement.remove()" style="position:absolute;top:0.6rem;right:0.6rem;background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;line-height:1;">×</button>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.6rem; margin-bottom:0.6rem;">
+        <div class="form-group" style="margin:0;"><label>Name</label><input class="cat-name" type="text" placeholder="General" /></div>
+        <div class="form-group" style="margin:0;"><label>Price (₹)</label><input class="cat-price" type="number" placeholder="1000" /></div>
+        <div class="form-group" style="margin:0;"><label>Seats/Row</label><input class="cat-spr" type="number" placeholder="20" /></div>
+      </div>
+      <div class="form-group" style="margin:0;"><label>Rows (comma separated)</label><input class="cat-rows" type="text" placeholder="D, E, F" /></div>`;
+    document.getElementById('cat-container').appendChild(div);
+  }
+
+  async function submitCreateEvent() {
+    const errEl = document.getElementById('create-error');
+    errEl.style.display = 'none';
+    const title = document.getElementById('ce-title').value.trim();
+    const venue = document.getElementById('ce-venue').value.trim();
+    const date = document.getElementById('ce-date').value;
+
+    if (!title || !venue || !date) {
+      errEl.style.display = 'flex'; errEl.textContent = '⚠ Title, venue and date are required'; return;
+    }
+
+    const cats = Array.from(document.querySelectorAll('.cat-entry')).map(el => ({
+      name: el.querySelector('.cat-name').value.trim(),
+      price: Number(el.querySelector('.cat-price').value),
+      seats_per_row: Number(el.querySelector('.cat-spr').value),
+      rows: el.querySelector('.cat-rows').value.split(',').map(r => r.trim()).filter(Boolean)
+    }));
+
+    if (!cats.length || cats.some(c => !c.name || !c.price || !c.seats_per_row || !c.rows.length)) {
+      errEl.style.display = 'flex'; errEl.textContent = '⚠ Please complete all category fields'; return;
+    }
+
+    const btn = document.getElementById('create-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Creating...';
+
+    try {
+      await api.post('/events', {
+        title, venue,
+        description: document.getElementById('ce-desc').value,
+        date_time: date,
+        category: document.getElementById('ce-category').value,
+        categories: cats
+      });
+      toast('Event created! Publish it when ready.', 'success');
+      closeModal('create-modal');
+      await loadEvents();
+    } catch (err) {
+      errEl.style.display = 'flex'; errEl.textContent = `⚠ ${err.message}`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create Event';
+    }
+  }
+
+  loadEvents();
+</script>
+</body>
+</html>

@@ -44,7 +44,8 @@ export const ReleaseSeat = async (req, res) => {
 export const GetSeatMap = async (req, res) => {
   try {
     const { eventId } = req.params;
-    const data = await getSeatMap(eventId);
+    const userId = req.user.id;
+    const data = await getSeatMap(eventId, userId);
     return res.status(200).json({ success: true, data });
 
   } catch (err) {

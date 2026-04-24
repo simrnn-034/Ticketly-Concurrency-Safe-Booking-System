@@ -3,7 +3,8 @@ import {
   getEvents,
   getEventById as getEventByIdService,
   publishEvent as publishEventService,
-  cancelEvent as cancelEventService
+  cancelEvent as cancelEventService,
+  getOrganizerEvents as getOrganizerEventsService
 } from '../services/events.service.js';
 
 export const createEvent = async (req, res) => {
@@ -63,5 +64,14 @@ export const cancelEvent = async (req, res) => {
       return res.status(403).json({ error: err.message });
     }
     return res.status(400).json({ error: err.message });
+  }
+};
+
+export const getOrganizerEvents = async (req, res) => {
+  try {
+    const result = await getOrganizerEventsService(req.user.id);
+    return res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 };

@@ -1,11 +1,6 @@
 import {Worker} from 'bullmq';
 import prisma from '../config/prisma.js';
-
-const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379
-};
-
+import {bullConnection} from '../config/redis.js';
 const eventWorker = new Worker('events', async(job)=>{
   if(job.name==='complete-event'){
     const {eventId} = job.data;
@@ -23,7 +18,7 @@ const eventWorker = new Worker('events', async(job)=>{
 
     console.log(`Event ${eventId} marked as completed`);
   }
-}, {connection});
+}, {connection: bullConnection});
 
 eventWorker.on('failed',(err,job)=>{
   console.error(`Event Job ${job.id} failed`, err.message);

@@ -3,7 +3,8 @@ import {
   confirmBooking,
   cancelBooking as cancelBookingService,
   getBooking as getBookingService,
-  getUserBookings as getUserBookingsService
+  getUserBookings as getUserBookingsService,
+  getActiveBookings as getActiveBookingsService
 } from '../services/booking.service.js';
 
 export const initiate = async (req, res) => {
@@ -33,13 +34,15 @@ export const initiate = async (req, res) => {
 
 export const confirm = async (req, res) => {
   try {
-    const { bookingId } = req.body;
+    const { bookingId, razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+    const paymentDetails = { razorpayPaymentId, razorpayOrderId, razorpaySignature };
+    
 
-    if (!bookingId) {
-      return res.status(400).json({ error: 'bookingId is required' });
+     if (!bookingId || !razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+      return res.status(400).json({ error: 'All payment details are required' });
     }
 
-    const result = await confirmBooking(req.user.id, bookingId);
+    const result = await confirmBooking(req.user.id, bookingId, paymentDetails);
     return res.status(200).json({ success: true, data: result });
 
   } catch (err) {
@@ -106,6 +109,16 @@ export const getUserBookings = async (req, res) => {
     const result = await getUserBookingsService(req.user.id);
     return res.status(200).json({ success: true, data: result });
 
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+export const activeBookings = async (req,res) => {
+  try {
+    const userId = req.user.id;
+    const result = await getActiveBookingsService(userId);
+    return res.status(200).json({ success: true, data: result });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

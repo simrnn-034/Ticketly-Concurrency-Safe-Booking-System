@@ -2,6 +2,16 @@ import client from "../config/redis.js";
 import prisma from "../config/prisma.js";
 
 export const holdSeats = async (userId, eventId, seatIds) => {
+  const existingBooking = await prisma.booking.findFirst({
+  where: {
+    userId,
+    status: 'pending'
+  }
+});
+
+if (existingBooking) {
+  throw new Error('Complete or cancel existing booking first');
+}
   const heldSoFar = [];
 
   for (let seatId of seatIds) {
@@ -49,7 +59,7 @@ export const verifyHolds = async (userId, eventId, seatIds) => {
   }
 };
 
-export const getSeatMap = async (eventId) => {
+export const getSeatMap = async (eventId, userId) => {
   const cached = await client.get(`seatmap:${eventId}`);
   if(cached) return JSON.parse(cached);
 
@@ -62,10 +72,11 @@ export const getSeatMap = async (eventId) => {
     seats.map(async (seat) => {
       const holdKey = `hold:${eventId}:${seat.id}`;
       const heldBy = await client.get(holdKey);
-      return {
-        ...seat,
-        status: heldBy ? 'held' : seat.status
-      };
+     return {
+    ...seat,
+    isHeld: !!heldBy,
+    heldBy: heldBy || null
+};
     })
   );
 

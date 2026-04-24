@@ -5,81 +5,263 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign In — TicketGuard</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    @media (max-width: 768px) {
+      .auth-page { grid-template-columns: 1fr; }
+      .auth-left { display: none; }
+      .auth-right { padding: 2rem 1.5rem; }
+    }
+  </style>
 </head>
 <body>
 
+<div id="token-expiry-bar"></div>
+
 <nav>
-  <a href="index.html" class="nav-logo">TICKET<span>GUARD</span></a>
+  <a href="index.html" class="nav-logo">Ticket<span>Guard</span></a>
   <div class="nav-links">
     <a href="index.html">Events</a>
   </div>
-  <div class="nav-auth"></div>
+  <div class="nav-right"></div>
 </nav>
 
-<div class="auth-wrapper">
-  <div class="auth-card">
-    <div class="auth-logo">TICKET<span style="color:var(--text);">GUARD</span></div>
-    <p class="auth-subtitle">Secure, concurrent-safe ticket booking</p>
+<div class="auth-page">
 
-    <div class="auth-tabs">
-      <button class="auth-tab active" id="login-tab" onclick="switchTab('login')">Sign In</button>
-      <button class="auth-tab" id="register-tab" onclick="switchTab('register')">Register</button>
-    </div>
-
-    <!-- LOGIN FORM -->
-    <div id="login-form">
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="login-email" placeholder="you@example.com" />
+  <!-- LEFT PANEL -->
+  <div class="auth-left">
+    <div class="auth-brand">TicketGuard</div>
+    <p class="auth-tagline">
+      The only ticketing platform with real-time seat holds, distributed locking, and instant confirmation.
+    </p>
+    <div class="auth-features">
+      <div class="auth-feature">
+        <div class="auth-feature-icon">⚡</div>
+        <span>Seats held for 10 minutes while you complete payment</span>
       </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="login-password" placeholder="••••••••" />
+      <div class="auth-feature">
+        <div class="auth-feature-icon">🔒</div>
+        <span>Zero double-bookings with Redis-powered concurrency control</span>
       </div>
-      <button class="btn btn-gold btn-full btn-lg" id="login-btn" onclick="login()" style="margin-top:0.5rem;">
-        Sign In
-      </button>
-
-      <div style="margin-top:1.25rem; text-align:center; font-size:0.78rem; color:var(--muted);">
-        Demo accounts: user@test.com or organizer@test.com · password123
+      <div class="auth-feature">
+        <div class="auth-feature-icon">🎫</div>
+        <span>Instant booking confirmation with email notification</span>
+      </div>
+      <div class="auth-feature">
+        <div class="auth-feature-icon">🤖</div>
+        <span>AI-powered event recommendations based on your history</span>
       </div>
     </div>
+  </div>
 
-    <!-- REGISTER FORM -->
-    <div id="register-form" style="display:none;">
-      <div class="form-group">
-        <label>Full Name</label>
-        <input type="text" id="reg-name" placeholder="John Doe" />
+  <!-- RIGHT PANEL -->
+  <div class="auth-right">
+    <div class="auth-form-card">
+      <div class="auth-form-title" id="form-title">Welcome back</div>
+      <p class="auth-form-subtitle" id="form-subtitle">Sign in to your account to continue</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="login-tab" onclick="switchTab('login')">Sign In</button>
+        <button class="auth-tab" id="register-tab" onclick="switchTab('register')">Create Account</button>
       </div>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="reg-email" placeholder="you@example.com" />
+
+      <!-- ALERT -->
+      <div class="auth-alert" id="auth-alert"></div>
+
+      <!-- LOGIN -->
+      <div id="login-form">
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <button class="btn btn-primary btn-full btn-lg" id="login-btn" onclick="submitLogin()">
+          Sign In
+        </button>
+        <div class="auth-divider">or try a demo account</div>
+        <div style="display:flex; gap:0.5rem;">
+          <button class="btn btn-outline btn-full btn-sm" onclick="fillDemo('user@test.com')">
+            👤 Demo User
+          </button>
+          <button class="btn btn-outline btn-full btn-sm" onclick="fillDemo('organizer@test.com')">
+            🎭 Demo Organizer
+          </button>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Phone (optional)</label>
-        <input type="tel" id="reg-phone" placeholder="+91 98765 43210" />
+
+      <!-- REGISTER -->
+      <div id="register-form" style="display:none;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+          <div class="form-group">
+            <label>First Name</label>
+            <input type="text" id="reg-firstname" placeholder="Arjun" />
+          </div>
+          <div class="form-group">
+            <label>Last Name</label>
+            <input type="text" id="reg-lastname" placeholder="Sharma" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="tel" id="reg-phone" placeholder="+91 98765 43210" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="reg-password" placeholder="Min 8 characters" autocomplete="new-password" />
+          <div id="password-strength" style="margin-top:0.4rem; height:3px; background:var(--border); border-radius:2px; overflow:hidden;">
+            <div id="strength-bar" style="height:100%; width:0; transition:all 0.3s; border-radius:2px;"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>I want to</label>
+          <select id="reg-role">
+            <option value="user">Book tickets for events</option>
+            <option value="organizer">Organise and host events</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-full btn-lg" id="register-btn" onclick="submitRegister()">
+          Create Account
+        </button>
       </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="reg-password" placeholder="Min 8 characters" />
-      </div>
-      <div class="form-group">
-        <label>Account Type</label>
-        <select id="reg-role">
-          <option value="user">User — Book tickets</option>
-          <option value="organizer">Organizer — Create events</option>
-        </select>
-      </div>
-      <button class="btn btn-gold btn-full btn-lg" id="register-btn" onclick="register()" style="margin-top:0.5rem;">
-        Create Account
-      </button>
+
+      <p style="text-align:center; font-size:0.75rem; color:var(--muted); margin-top:1.5rem;">
+        By continuing you agree to our Terms of Service and Privacy Policy
+      </p>
     </div>
-
-    <div id="auth-error" style="display:none; margin-top:1rem; padding:0.75rem; background:rgba(224,82,82,0.1); border:1px solid var(--red); border-radius:4px; font-size:0.8rem; color:var(--red);"></div>
   </div>
 </div>
-
 <script src="utils.js"></script>
-<script src="js/auth.js"></script>
+<script>
+  
+  (async () => {
+    const loggedIn = await auth.isLoggedIn();
+    if (loggedIn) {
+      window.location.href = 'index.html';
+    }
+  })();
+
+  const urlParams = new URLSearchParams(location.search);
+  if (urlParams.get('tab') === 'register') switchTab('register');
+
+  function switchTab(tab) {
+    const isLogin = tab === 'login';
+    document.getElementById('login-tab').classList.toggle('active', isLogin);
+    document.getElementById('register-tab').classList.toggle('active', !isLogin);
+    document.getElementById('login-form').style.display = isLogin ? 'block' : 'none';
+    document.getElementById('register-form').style.display = isLogin ? 'none' : 'block';
+    document.getElementById('form-title').textContent = isLogin ? 'Welcome back' : 'Create account';
+    document.getElementById('form-subtitle').textContent = isLogin
+      ? 'Sign in to your account to continue'
+      : 'Join thousands of event-goers on TicketGuard';
+    clearAlert();
+  }
+
+  function showAlert(msg, type = 'error') {
+    const el = document.getElementById('auth-alert');
+    el.className = `auth-alert auth-alert-${type} show`;
+    el.innerHTML = `<span>${type === 'error' ? '✕' : '✓'}</span> ${msg}`;
+  }
+
+  function clearAlert() {
+    const el = document.getElementById('auth-alert');
+    el.classList.remove('show');
+  }
+
+  function fillDemo(email) {
+    document.getElementById('login-email').value = email;
+    document.getElementById('login-password').value = 'password123';
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const pwInput = document.getElementById('reg-password');
+    if (!pwInput) return;
+    pwInput.addEventListener('input', () => {
+      const val = pwInput.value;
+      const bar = document.getElementById('strength-bar');
+      let strength = 0;
+      if (val.length >= 8) strength++;
+      if (/[A-Z]/.test(val)) strength++;
+      if (/[0-9]/.test(val)) strength++;
+      if (/[^A-Za-z0-9]/.test(val)) strength++;
+      const colors = ['', '#ef4444', '#f97316', '#eab308', '#22c55e'];
+      const widths = ['0%', '25%', '50%', '75%', '100%'];
+      bar.style.width = widths[strength];
+      bar.style.background = colors[strength] || 'transparent';
+    });
+  });
+
+  async function submitLogin() {
+    clearAlert();
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+
+    if (!email || !password) { showAlert('Please fill in all fields'); return; }
+
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Signing in...';
+
+    try {
+      const data = await api.post('/auth/login', { email, password });
+
+      toast(`Welcome back, ${data.user.name || 'there'}!`, 'success');
+
+      const redirect = urlParams.get('redirect') || 'index.html';
+      setTimeout(() => window.location.href = redirect, 600);
+    } catch (err) {
+      showAlert(err.message === 'Session expired' ? 'Invalid email or password' : err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    }
+  }
+
+  async function submitRegister() {
+    clearAlert();
+    const firstname = document.getElementById('reg-firstname').value.trim();
+    const lastname = document.getElementById('reg-lastname').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const phone = document.getElementById('reg-phone').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const role = document.getElementById('reg-role').value;
+
+    if (!firstname || !email || !password) { showAlert('Please fill in all required fields'); return; }
+    if (password.length < 8) { showAlert('Password must be at least 8 characters'); return; }
+
+    const btn = document.getElementById('register-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Creating account...';
+
+    try {
+      await api.post('/auth/register', {
+        name: `${firstname} ${lastname}`.trim(),
+        email, phone, password, role
+      });
+
+      toast('Account created! Welcome to TicketGuard 🎉', 'success');
+      setTimeout(() => window.location.href = role === 'organizer' ? 'organizer.html' : 'index.html', 700);
+    } catch (err) {
+      showAlert(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Create Account';
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    if (!document.getElementById('login-form').style.display || document.getElementById('login-form').style.display === 'block') {
+      submitLogin();
+    } else {
+      submitRegister();
+    }
+  });
+</script>
 </body>
 </html>

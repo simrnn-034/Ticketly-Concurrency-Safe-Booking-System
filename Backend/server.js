@@ -2,9 +2,13 @@ import 'dotenv/config';
 import app from './app.js';
 import prisma from './config/prisma.js';
 import client from './config/redis.js';
+import ai from './config/gemini.js';
 
 import './workers/notification.worker.js';
 import './workers/event.worker.js';
+import './workers/booking.worker.js';
+
+import { scheduleCleanupJob } from './services/booking.service.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -16,6 +20,9 @@ const startServer = async () => {
 
     await client.ping();
     console.log('Redis connected');
+
+   
+    console.log('AI service initialized');
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
@@ -42,3 +49,4 @@ process.on('SIGINT', async () => {
 });
 
 startServer();
+await scheduleCleanupJob(); 

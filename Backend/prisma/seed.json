@@ -1,0 +1,134 @@
+{
+  "users": [
+    {
+      "name": "Arjun Sharma",
+      "email": "organizer@test.com",
+      "password": "password123",
+      "role": "organizer",
+      "phone": "+91 98765 43210"
+    },
+    {
+      "name": "Priya Mehta",
+      "email": "user@test.com",
+      "password": "password123",
+      "role": "user",
+      "phone": "+91 91234 56789"
+    },
+    {
+      "name": "Rohan Verma",
+      "email": "rohan@test.com",
+      "password": "password123",
+      "role": "user",
+      "phone": "+91 99887 76655"
+    }
+  ],
+  "events": [
+    {
+      "title": "Arijit Singh Live 2025",
+      "description": "Experience the magic of Arijit Singh live in concert. An unforgettable evening of Bollywood's most soulful hits performed live with a full orchestra.",
+      "venue": "DY Patil Stadium, Mumbai",
+      "category": "Music",
+      "date_time": "2026-06-15T19:00:00Z",
+      "status": "published",
+      "categories": [
+        { "name": "Platinum", "price": 5000, "rows": ["A", "B"], "seats_per_row": 10 },
+        { "name": "Gold", "price": 3000, "rows": ["C", "D", "E"], "seats_per_row": 15 },
+        { "name": "Silver", "price": 1500, "rows": ["F", "G", "H"], "seats_per_row": 20 },
+        { "name": "General", "price": 800, "rows": ["I", "J", "K", "L"], "seats_per_row": 25 }
+      ]
+    },
+    {
+      "title": "Sunburn Festival 2025",
+      "description": "Asia's biggest EDM festival returns with an incredible lineup of global DJs. Three days of non-stop electronic music, stunning visuals and unforgettable experiences.",
+      "venue": "Candolim Beach, Goa",
+      "category": "Music",
+      "date_time": "2026-07-20T16:00:00Z",
+      "status": "published",
+      "categories": [
+        { "name": "VIP", "price": 8000, "rows": ["A", "B", "C"], "seats_per_row": 10 },
+        { "name": "Premium", "price": 4500, "rows": ["D", "E", "F"], "seats_per_row": 15 },
+        { "name": "General", "price": 2000, "rows": ["G", "H", "I", "J"], "seats_per_row": 20 }
+      ]
+    },
+    {
+      "title": "IPL Final 2025",
+      "description": "The ultimate clash of the titans. Watch the two best teams in the Indian Premier League battle it out for the coveted IPL trophy in front of a packed stadium.",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "category": "Sports",
+      "date_time": "2026-08-10T14:00:00Z",
+      "status": "published",
+      "categories": [
+        { "name": "Corporate Box", "price": 15000, "rows": ["A", "B"], "seats_per_row": 8 },
+        { "name": "Premium Stand", "price": 6000, "rows": ["C", "D", "E"], "seats_per_row": 20 },
+        { "name": "East Stand", "price": 2500, "rows": ["F", "G", "H", "I"], "seats_per_row": 30 },
+        { "name": "General Stand", "price": 1000, "rows": ["J", "K", "L", "M", "N"], "seats_per_row": 40 }
+      ]
+    },
+    {
+      "title": "Zakir Khan Live — Sakht Launda Tour",
+      "description": "India's favourite comedian Zakir Khan returns with his brand new stand-up special. Expect relatable stories, witty observations and his signature Sakht Launda energy.",
+      "venue": "Jawaharlal Nehru Indoor Stadium, Delhi",
+      "category": "Comedy",
+      "date_time": "2026-05-25T19:30:00Z",
+      "status": "published",
+      "categories": [
+        { "name": "Front Row", "price": 3500, "rows": ["A", "B"], "seats_per_row": 12 },
+        { "name": "Premium", "price": 2000, "rows": ["C", "D", "E"], "seats_per_row": 15 },
+        { "name": "General", "price": 999, "rows": ["F", "G", "H", "I"], "seats_per_row": 20 }
+      ]
+    },
+    {
+      "title": "Tech Summit India 2025",
+      "description": "India's largest technology conference featuring keynotes from global tech leaders, workshops on AI, Web3 and Cloud, and a massive networking fair with 200+ companies.",
+      "venue": "Bangalore International Exhibition Centre",
+      "category": "Conference",
+      "date_time": "2026-09-05T09:00:00Z",
+      "status": "published",
+      "categories": [
+        { "name": "Executive Pass", "price": 12000, "rows": ["A", "B", "C"], "seats_per_row": 10 },
+        { "name": "Professional Pass", "price": 5000, "rows": ["D", "E", "F", "G"], "seats_per_row": 20 },
+        { "name": "Student Pass", "price": 999, "rows": ["H", "I", "J"], "seats_per_row": 25 }
+      ]
+    },
+    {
+      "title": "Coldplay — Music of the Spheres World Tour",
+      "description": "Coldplay brings their record-breaking Music of the Spheres World Tour to India. One of the most spectacular live shows on earth with LED wristbands, confetti cannons and Chris Martin at his finest.",
+      "venue": "DY Patil Stadium, Mumbai",
+      "category": "Music",
+      "date_time": "2026-10-18T18:30:00Z",
+      "status": "published",
+      "categories": [
+        { "name": "Golden Circle", "price": 25000, "rows": ["A", "B", "C"], "seats_per_row": 8 },
+        { "name": "Platinum", "price": 15000, "rows": ["D", "E", "F"], "seats_per_row": 12 },
+        { "name": "Gold", "price": 8000, "rows": ["G", "H", "I", "J"], "seats_per_row": 18 },
+        { "name": "Silver", "price": 4000, "rows": ["K", "L", "M", "N", "O"], "seats_per_row": 25 }
+      ]
+    },
+    {
+      "title": "Hamlet — National Theatre Live",
+      "description": "A critically acclaimed modern adaptation of Shakespeare's Hamlet featuring India's finest theatre actors. Presented by the National School of Drama in association with the British Council.",
+      "venue": "Kamani Auditorium, New Delhi",
+      "category": "Theatre",
+      "date_time": "2026-05-10T18:00:00Z",
+      "status": "published",
+      "categories": [
+        { "name": "Orchestra", "price": 2500, "rows": ["A", "B", "C"], "seats_per_row": 15 },
+        { "name": "Mezzanine", "price": 1500, "rows": ["D", "E", "F"], "seats_per_row": 18 },
+        { "name": "Balcony", "price": 800, "rows": ["G", "H"], "seats_per_row": 20 }
+      ]
+    },
+    {
+      "title": "Pro Kabaddi League Finals",
+      "description": "The electrifying climax of Pro Kabaddi League Season 11. Watch the best kabaddi players in the world compete for the ultimate glory in front of a roaring crowd.",
+      "venue": "NSCI Dome, Mumbai",
+      "category": "Sports",
+      "date_time": "2026-11-22T19:00:00Z",
+      "status": "draft",
+      "categories": [
+        { "name": "Courtside", "price": 4000, "rows": ["A", "B"], "seats_per_row": 10 },
+        { "name": "Premium", "price": 2000, "rows": ["C", "D", "E"], "seats_per_row": 20 },
+        { "name": "General", "price": 500, "rows": ["F", "G", "H", "I", "J"], "seats_per_row": 30 }
+      ]
+    }
+  ]
+}

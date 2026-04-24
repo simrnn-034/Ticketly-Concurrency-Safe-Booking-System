@@ -8,67 +8,291 @@
 </head>
 <body>
 
+<div id="token-expiry-bar"></div>
+
 <nav>
-  <a href="index.html" class="nav-logo">TICKET<span>GUARD</span></a>
+  <a href="index.html" class="nav-logo">Ticket<span>Guard</span></a>
   <div class="nav-links">
     <a href="index.html">Events</a>
     <a href="bookings.html" class="active">My Bookings</a>
   </div>
-  <div style="display:flex; gap:0.75rem; align-items:center;">
-    <span id="nav-user-info" style="font-size:0.8rem; color:var(--muted);"></span>
-    <div class="nav-auth"></div>
-  </div>
+  <div class="nav-right"></div>
 </nav>
 
 <div class="container page">
-  <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:1rem;">
+
+  <!-- PENDING BOOKING ALERT -->
+  <div id="pending-alert" style="display:none; background:white; border:1.5px solid var(--purple-light); border-radius:12px; padding:1.25rem 1.5rem; margin-bottom:1.75rem; box-shadow:0 4px 16px rgba(108,63,197,0.1); position:relative; overflow:hidden;">
+    <div style="position:absolute; left:0; top:0; bottom:0; width:4px; background:linear-gradient(180deg,var(--violet),var(--purple-mid));"></div>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:1rem; margin-bottom:2rem;">
     <div>
-      <h1 class="page-title">MY BOOKINGS</h1>
-      <p class="page-subtitle">Your ticket history and upcoming events</p>
+      <div class="page-eyebrow">// Your History</div>
+      <h1 class="page-title">My Bookings</h1>
+      <p class="page-subtitle">All your ticket purchases and pending bookings</p>
     </div>
     <a href="index.html" class="btn btn-outline">Browse Events</a>
   </div>
 
-  <!-- FILTER TABS -->
-  <div style="display:flex; gap:0.5rem; margin-bottom:2rem; border-bottom:1px solid var(--border); padding-bottom:1rem;">
-    <button class="btn btn-ghost btn-sm filter-btn active" onclick="filterBookings('all', this)">All</button>
-    <button class="btn btn-ghost btn-sm filter-btn" onclick="filterBookings('confirmed', this)">Confirmed</button>
-    <button class="btn btn-ghost btn-sm filter-btn" onclick="filterBookings('pending', this)">Pending</button>
-    <button class="btn btn-ghost btn-sm filter-btn" onclick="filterBookings('cancelled', this)">Cancelled</button>
+  <!-- FILTER -->
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterBookings('all', this)">All</button>
+    <button class="filter-btn" onclick="filterBookings('pending', this)">⏳ Pending</button>
+    <button class="filter-btn" onclick="filterBookings('confirmed', this)">✓ Confirmed</button>
+    <button class="filter-btn" onclick="filterBookings('cancelled', this)">✕ Cancelled</button>
   </div>
 
-  <!-- BOOKINGS LIST -->
-  <div id="bookings-container">
-    <div style="display:flex; align-items:center; gap:0.75rem; color:var(--muted); font-size:0.85rem;">
+  <!-- LIST -->
+  <div id="bookings-list">
+    <div style="display:flex; align-items:center; gap:0.75rem; color:var(--muted); font-size:0.85rem; padding:1rem 0;">
       <span class="spinner"></span> Loading bookings...
     </div>
   </div>
 </div>
 
 <!-- BOOKING DETAIL MODAL -->
-<div class="modal-overlay" id="booking-detail-modal">
-  <div class="modal" style="max-width:540px;">
-    <h2 class="modal-title">BOOKING DETAILS</h2>
-    <div id="booking-detail-content"></div>
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-icon">🎫</div>
+    <h2 class="modal-title">Booking Details</h2>
+    <div id="detail-content"></div>
     <div class="modal-actions" style="margin-top:1.5rem;">
-      <button class="btn btn-outline btn-full" onclick="closeModal('booking-detail-modal')">Close</button>
+      <button class="btn btn-outline btn-full" onclick="closeModal('detail-modal')">Close</button>
     </div>
   </div>
 </div>
 
-<!-- CANCEL CONFIRM MODAL -->
+<!-- CANCEL MODAL -->
 <div class="modal-overlay" id="cancel-modal">
   <div class="modal">
-    <h2 class="modal-title">CANCEL BOOKING</h2>
-    <p class="modal-subtitle">Are you sure you want to cancel this booking? Your refund will be processed within 5-7 business days.</p>
+    <div class="modal-icon" style="background:#fef2f2;">❌</div>
+    <h2 class="modal-title">Cancel Booking?</h2>
+    <p class="modal-subtitle" id="cancel-subtitle">This action cannot be undone. Your refund will be processed within 5–7 business days.</p>
     <div class="modal-actions">
-      <button class="btn btn-danger btn-full" id="cancel-confirm-btn">Yes, Cancel Booking</button>
+      <button class="btn btn-danger-filled btn-full" id="cancel-confirm-btn">Yes, Cancel Booking</button>
       <button class="btn btn-outline" onclick="closeModal('cancel-modal')">Keep Booking</button>
     </div>
   </div>
 </div>
 
 <script src="utils.js"></script>
-<script src="js/bookings.js"></script>
+<script>
+  let allBookings = [];
+  let currentFilter = 'all';
+  let pendingBooking = null;
+
+  async function loadBookings() {
+    if (!(await requireAuth()))  return;
+
+    try {
+      // load both active pending + all bookings in parallel
+      const bookingsData = await api.get('/bookings/me');
+allBookings = bookingsData.data || [];
+
+// extract active pending booking
+pendingBooking = allBookings.find(
+  b => b.status === 'pending' && new Date(b.expiresAt) > new Date()
+);
+      // show pending alert if active booking exists
+      if (pendingBooking) showPendingAlert(pendingBooking);
+
+      renderBookings();
+    } catch (err) {
+      document.getElementById('bookings-list').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">⚠️</div>
+          <h3>Could Not Load Bookings</h3>
+          <p>${err.message}</p>
+        </div>`;
+    }
+  }
+
+  function showPendingAlert(pending) {
+    const el = document.getElementById('pending-alert');
+    const expiresAt = new Date(pending.expiresAt);
+    const seats = pending.bookingSeats || [];
+    const seatLabels = seats.slice(0, 4).map(s => `${s.seat?.rowLabel || ''}${s.seat?.seatNumber || ''}`).join(', ');
+    const more = seats.length > 4 ? ` +${seats.length - 4}` : '';
+
+    el.style.display = 'block';
+    el.innerHTML = `
+      <div style="position:absolute; left:0; top:0; bottom:0; width:4px; background:linear-gradient(180deg,var(--violet),var(--purple-mid));"></div>
+      <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; padding-left:0.5rem;">
+        <div style="width:40px; height:40px; background:var(--purple-pale); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0;">⏳</div>
+        <div style="flex:1; min-width:180px;">
+          <div style="font-weight:600; color:var(--violet); font-size:0.88rem; margin-bottom:0.15rem;">Pending Booking — Action Required</div>
+          <div style="font-size:0.78rem; color:var(--muted);">
+            ${pending.event?.title || 'Event'} · Seats: <strong>${seatLabels}${more}</strong> · <strong>${formatCurrency(pending.totalPrice)}</strong>
+          </div>
+          <div id="pending-countdown" style="font-family:'DM Mono',monospace; font-size:0.75rem; color:var(--orange); margin-top:0.2rem;"></div>
+        </div>
+        <div style="display:flex; gap:0.5rem; flex-shrink:0;">
+          <a href="event.html?id=${pending.eventId}" class="btn btn-primary btn-sm">Resume & Pay</a>
+          <button class="btn btn-danger btn-sm" onclick="cancelPending('${pending.id}')">Cancel</button>
+        </div>
+      </div>`;
+
+    // countdown
+    function updateCountdown() {
+      const remaining = expiresAt - Date.now();
+      const el = document.getElementById('pending-countdown');
+      if (!el) return;
+      if (remaining <= 0) { el.textContent = 'Expired'; return; }
+      el.textContent = `Hold expires in: ${formatDuration(remaining)}`;
+      el.style.color = remaining < 120000 ? 'var(--red)' : 'var(--orange)';
+    }
+    clearInterval(window.pendingCountdownInterval);
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+  }
+
+  async function cancelPending(bookingId) {
+    if (!confirm('Cancel this pending booking and release your held seats?')) return;
+    try {
+      await api.delete(`/bookings/${bookingId}`);
+      clearInterval(window.pendingCountdownInterval);
+      toast('Pending booking cancelled. Seats released.', 'info');
+      document.getElementById('pending-alert').style.display = 'none';
+      await loadBookings();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  function filterBookings(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderBookings();
+  }
+
+  function renderBookings() {
+    const container = document.getElementById('bookings-list');
+    const filtered = currentFilter === 'all' ? allBookings : allBookings.filter(b => b.status === currentFilter);
+
+    if (!filtered.length) {
+      const msgs = {
+        all: { icon: '🎫', title: 'No Bookings Yet', msg: "You haven't booked any tickets yet." },
+        pending: { icon: '⏳', title: 'No Pending Bookings', msg: 'All your bookings are confirmed or cancelled.' },
+        confirmed: { icon: '✓', title: 'No Confirmed Bookings', msg: '' },
+        cancelled: { icon: '✕', title: 'No Cancelled Bookings', msg: '' }
+      };
+      const m = msgs[currentFilter] || msgs.all;
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">${m.icon}</div>
+          <h3>${m.title}</h3>
+          <p>${m.msg}</p>
+          ${currentFilter === 'all' ? `<a href="index.html" class="btn btn-primary" style="margin-top:1.5rem;">Browse Events</a>` : ''}
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = filtered.map(b => {
+      const seats = b.bookingSeats || [];
+      const seatLabels = seats.slice(0, 3).map(s => `${s.seat?.rowLabel || ''}${s.seat?.seatNumber || ''}`).join(', ');
+      const more = seats.length > 3 ? ` +${seats.length - 3} more` : '';
+
+      return `
+        <div class="booking-item">
+          <div class="booking-item-accent"></div>
+          <div class="booking-item-body">
+            <div style="flex:1;">
+              <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.4rem; flex-wrap:wrap;">
+                ${statusBadge(b.status)}
+                ${b.status === 'pending' ? `<span style="font-family:'DM Mono',monospace; font-size:0.7rem; color:var(--orange);">⏱ Expires ${formatDate(b.expiresAt)}</span>` : ''}
+              </div>
+              <div class="booking-event-name">${b.event?.title || 'Event'}</div>
+              <div class="booking-meta">
+                📅 ${formatDate(b.event?.eventDate)} · 📍 ${b.event?.venue || 'TBA'}<br>
+                🪑 Seats: ${seatLabels}${more}
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:0.5rem; align-items:flex-end; flex-shrink:0;">
+              <div class="booking-amount">${formatCurrency(b.totalPrice)}</div>
+              <button class="btn btn-outline btn-sm" onclick="viewDetail('${b.id}')">Details</button>
+              ${b.status === 'pending' ? `<a href="event.html?id=${b.eventId}" class="btn btn-primary btn-sm">Resume</a>` : ''}
+              ${b.status === 'confirmed' || b.status === 'pending' ? `<button class="btn btn-danger btn-sm" onclick="initCancel('${b.id}', '${b.status}')">Cancel</button>` : ''}
+            </div>
+          </div>
+          <div class="booking-item-footer">
+            <span style="font-size:0.75rem; color:var(--muted);">Ref: <span style="font-family:'DM Mono',monospace;">${b.id.slice(0, 12)}...</span></span>
+            <span style="font-size:0.75rem; color:var(--muted);">Booked ${formatDate(b.createdAt)}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  async function viewDetail(bookingId) {
+    try {
+      const data = await api.get(`/bookings/${bookingId}`);
+      const b = data.data;
+      const seats = b.bookingSeats || [];
+
+      document.getElementById('detail-content').innerHTML = `
+        <div style="margin-bottom:1rem;">
+          <div style="font-family:'Playfair Display',serif; font-size:1.15rem; font-weight:600; margin-bottom:0.3rem;">${b.event?.title}</div>
+          <div style="font-size:0.8rem; color:var(--muted); margin-bottom:0.5rem;">
+            📅 ${formatDate(b.event?.eventDate)} · 🕐 ${formatTime(b.event?.eventDate)}<br>
+            📍 ${b.event?.venue || 'TBA'}
+          </div>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">${statusBadge(b.status)}</div>
+        </div>
+        <div class="divider"></div>
+        <p style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-weight:600; margin-bottom:0.6rem;">Seats</p>
+        ${seats.map(s => `
+          <div class="summary-seat">
+            <span class="summary-seat-label">Row ${s.seat?.rowLabel} · Seat ${s.seat?.seatNumber} <span class="tag">${s.seat?.category?.categoryName || ''}</span></span>
+            <span class="summary-seat-price">${formatCurrency(s.pricePaid)}</span>
+          </div>`).join('')}
+        <div class="divider"></div>
+        <div class="summary-total" style="padding-top:0; margin-top:0;">
+          <span style="font-size:0.85rem; color:var(--text2);">Total Paid</span>
+          <span class="summary-amount">${formatCurrency(b.totalPrice)}</span>
+        </div>
+        <div style="margin-top:1rem; padding:0.85rem; background:var(--off); border-radius:8px;">
+          <div style="font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.25rem; font-weight:600;">Booking Reference</div>
+          <div style="font-family:'DM Mono',monospace; font-size:0.8rem; color:var(--violet); word-break:break-all;">${b.id}</div>
+        </div>
+        ${b.status === 'confirmed' ? `<button class="btn btn-danger btn-full" style="margin-top:1rem;" onclick="closeModal('detail-modal'); initCancel('${b.id}', 'confirmed')">Cancel Booking</button>` : ''}
+        ${b.status === 'pending' ? `<a href="event.html?id=${b.eventId}" class="btn btn-primary btn-full" style="margin-top:1rem;">Resume & Pay</a>` : ''}
+      `;
+      openModal('detail-modal');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  function initCancel(bookingId, status) {
+    const subtitle = status === 'pending'
+      ? 'This will cancel your pending booking and release all held seats immediately.'
+      : 'Your refund will be processed within 5–7 business days.';
+    document.getElementById('cancel-subtitle').textContent = subtitle;
+    const btn = document.getElementById('cancel-confirm-btn');
+    btn.onclick = () => cancelBooking(bookingId);
+    openModal('cancel-modal');
+  }
+
+  async function cancelBooking(bookingId) {
+    const btn = document.getElementById('cancel-confirm-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Cancelling...';
+    try {
+      await api.delete(`/bookings/${bookingId}`);
+      toast('Booking cancelled successfully.', 'success');
+      closeModal('cancel-modal');
+      closeModal('detail-modal');
+      await loadBookings();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Yes, Cancel Booking';
+    }
+  }
+
+  loadBookings();
+</script>
 </body>
 </html>
