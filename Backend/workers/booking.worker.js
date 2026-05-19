@@ -2,6 +2,7 @@ import { Worker } from 'bullmq';
 import prisma from '../config/prisma.js';
 import client from '../config/redis.js';
 import { bullConnection } from '../config/redis.js';
+import { emitSeatUpdate } from '../config/socket.js';
 
 new Worker('bookings', async (job) => {
   
@@ -24,6 +25,14 @@ new Worker('bookings', async (job) => {
 
   await client.del(`active-booking:${userId}`);
   await client.del(`seatmap:${eventId}`);
+  await Promise.all(seatIds.map((seatId) => client.del(`hold:${eventId}:${seatId}`)));
+  seatIds.forEach((seatId) => {
+    emitSeatUpdate(eventId, seatId, {
+      status: 'available',
+      isHeld: false,
+      heldBy: null
+    });
+  });
 }
 
 if (job.name === 'cleanup-expired-bookings') {
@@ -51,9 +60,17 @@ if (job.name === 'cleanup-expired-bookings') {
 
     await client.del(`active-booking:${booking.userId}`);
     await client.del(`seatmap:${booking.eventId}`);
+    await Promise.all(seatIds.map((seatId) => client.del(`hold:${booking.eventId}:${seatId}`)));
+    seatIds.forEach((seatId) => {
+      emitSeatUpdate(booking.eventId, seatId, {
+        status: 'available',
+        isHeld: false,
+        heldBy: null
+      });
+    });
   }
 
-  console.log(`🧹 Cleaned ${expired.length} expired bookings`);
+  console.log(` Cleaned ${expired.length} expired bookings`);
 }
 
 }, { connection: bullConnection });

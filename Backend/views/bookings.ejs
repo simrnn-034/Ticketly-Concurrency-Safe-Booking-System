@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Bookings — Ticketly</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="token-expiry-bar"></div>
+
+<%- include('partials/navbar') %>
+
+<div class="container page">
+
+  <% 
+    const pendingBooking = bookings && bookings.find(
+      b => b.status === 'pending' && new Date(b.expiresAt) > new Date()
+    );
+  %>
+
+  <% if (pendingBooking) { 
+      const seats = pendingBooking.bookingSeats || [];
+      const seatLabels = seats.slice(0,4).map(s => 
+        (s.seat?.rowLabel || '') + (s.seat?.seatNumber || '')
+      ).join(', ');
+      const more = seats.length > 4 ? ` +${seats.length - 4}` : '';
+  %>
+
+  <div id="pending-alert" style="background:white; border:1.5px solid var(--purple-light); border-radius:12px; padding:1.25rem 1.5rem; margin-bottom:1.75rem;">
+    <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+      <div>⏳</div>
+      <div style="flex:1;">
+        <div style="font-weight:600;">Pending Booking — Action Required</div>
+        <div>
+          <%= pendingBooking.event?.title %> · Seats: 
+          <strong><%= seatLabels + more %></strong> · 
+          <strong>₹<%= pendingBooking.totalPrice %></strong>
+        </div>
+      </div>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <a href="/event.html?id=<%= pendingBooking.eventId %>&resume=true" class="btn btn-primary btn-sm">
+          Resume & Pay
+        </a>
+        <button type="button" class="btn btn-danger btn-sm" onclick="cancelBooking('<%= pendingBooking.id %>')">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <% } %>
+
+  <!-- HEADER -->
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:1rem; margin-bottom:2rem;">
+    <div>
+      <div class="page-eyebrow">// Your History</div>
+      <h1 class="page-title">My Bookings</h1>
+      <p class="page-subtitle">All your ticket purchases and pending bookings</p>
+    </div>
+    <a href="/" class="btn btn-outline">Browse Events</a>
+  </div>
+
+  <!-- FILTER (UI ONLY) -->
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterBookings('all', this)">All</button>
+    <button class="filter-btn" onclick="filterBookings('pending', this)">⏳ Pending</button>
+    <button class="filter-btn" onclick="filterBookings('confirmed', this)">✓ Confirmed</button>
+    <button class="filter-btn" onclick="filterBookings('cancelled', this)">✕ Cancelled</button>
+  </div>
+
+  <!-- BOOKINGS LIST -->
+  <div id="bookings-list">
+
+    <% if (!bookings || bookings.length === 0) { %>
+
+      <div class="empty-state">
+        <div class="empty-icon">🎫</div>
+        <h3>No Bookings Yet</h3>
+        <p>You haven't booked any tickets yet.</p>
+        <a href="/" class="btn btn-primary">Browse Events</a>
+      </div>
+
+    <% } else { %>
+
+      <% bookings.forEach(function(b) { 
+           const seats = b.bookingSeats || [];
+           const seatLabels = seats.slice(0,3).map(s => 
+             (s.seat?.rowLabel || '') + (s.seat?.seatNumber || '')
+           ).join(', ');
+           const more = seats.length > 3 ? ` +${seats.length - 3} more` : '';
+      %>
+
+      <div class="booking-item" data-status="<%= b.status %>">
+
+        <div class="booking-item-accent"></div>
+
+        <div class="booking-item-body">
+
+          <!-- LEFT -->
+          <div style="flex:1;">
+            <div style="margin-bottom:0.4rem;">
+              <span class="status-badge status-<%= b.status %>">
+                <%= b.status %>
+              </span>
+            </div>
+
+            <div class="booking-event-name">
+              <%= b.event?.title %>
+            </div>
+
+            <div class="booking-meta">
+              📅 <%= new Date(b.event?.eventDate).toLocaleDateString() %> · 
+              📍 <%= b.event?.venue || 'TBA' %><br>
+              🪑 Seats: <%= seatLabels + more %>
+            </div>
+          </div>
+
+          <!-- RIGHT -->
+          <div style="display:flex; flex-direction:column; gap:0.5rem; align-items:flex-end;">
+            <div class="booking-amount">₹<%= b.totalPrice %></div>
+
+            <a href="/booking?id=<%= b.id %>" class="btn btn-outline btn-sm">
+              Details
+            </a>
+
+            <% if (b.status === 'pending') { %>
+              <a href="/event.html?id=<%= b.eventId %>&resume=true" class="btn btn-primary btn-sm">
+                Resume & Pay
+              </a>
+              <button type="button" class="btn btn-danger btn-sm" onclick="cancelBooking('<%= b.id %>')">
+                Cancel
+              </button>
+            <% } %>
+          </div>
+
+        </div>
+
+        <div class="booking-item-footer">
+          <span>Ref: <%= b.id.slice(0, 12) %>...</span>
+          <span>Booked <%= new Date(b.createdAt).toLocaleDateString() %></span>
+        </div>
+
+      </div>
+
+      <% }) %>
+
+    <% } %>
+
+  </div>
+
+</div>
+
+ <srcipt src="/utils.js"></srcipt>
+
+<script>
+function filterBookings(filter, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  document.querySelectorAll('.booking-item').forEach(item => {
+    const status = item.dataset.status;
+    item.style.display = (filter === 'all' || status === filter) ? 'block' : 'none';
+  });
+}
+
+async function cancelBooking(bookingId) {
+  if (!confirm('Cancel this pending booking and release the seats?')) return;
+
+  try {
+    const response = await fetch(`/api/bookings/${bookingId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Unable to cancel booking');
+    }
+
+    window.location.reload();
+  } catch (err) {
+    alert(err.message || 'Cancel failed');
+  }
+}
+</script>
+
+</body>
+</html>

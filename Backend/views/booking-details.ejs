@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booking Details — Ticketly</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<%- include('partials/navbar') %>
+
+<div class="container page">
+
+  <% if (!booking) { %>
+    <div class="empty-state">
+      <div class="empty-icon">⚠️</div>
+      <h3>Booking Not Found</h3>
+      <p>Invalid or missing booking ID.</p>
+      <a href="/bookings" class="btn btn-primary">Back to Bookings</a>
+    </div>
+  <% } else { %>
+
+    <div class="page-eyebrow">// Booking Details</div>
+    <h1 class="page-title"><%= booking.event?.title %></h1>
+
+    <div class="booking-item" style="margin-top:2rem;">
+      <div class="booking-item-body">
+
+        <div>
+          <p><strong>Status:</strong> <%= booking.status %></p>
+          <p><strong>Venue:</strong> <%= booking.event?.venue %></p>
+          <p><strong>Date:</strong> <%= new Date(booking.event?.eventDate).toLocaleString() %></p>
+          <p><strong>Total:</strong> ₹<%= booking.totalPrice %></p>
+        </div>
+
+        <hr style="margin:1rem 0;">
+
+        <div>
+          <h3>Seats</h3>
+
+          <% booking.bookingSeats.forEach(s => { %>
+            <div class="summary-seat">
+              <span>
+                Row <%= s.seat?.rowLabel %> · Seat <%= s.seat?.seatNumber %>
+              </span>
+              <span>₹<%= s.pricePaid %></span>
+            </div>
+          <% }) %>
+        </div>
+
+      </div>
+    </div>
+
+    <a href="/bookings" class="btn btn-outline">← Back</a>
+
+  <% } %>
+
+</div>
+
+</body>
+</html>

@@ -2,7 +2,9 @@ import 'dotenv/config';
 import app from './app.js';
 import prisma from './config/prisma.js';
 import client from './config/redis.js';
-import ai from './config/gemini.js';
+import connectDB from './config/mongo.js';
+import http from 'http';
+import { initSocketServer } from './config/socket.js';
 
 import './workers/notification.worker.js';
 import './workers/event.worker.js';
@@ -10,21 +12,27 @@ import './workers/booking.worker.js';
 
 import { scheduleCleanupJob } from './services/booking.service.js';
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8000;
+const server = http.createServer(app);
 
 const startServer = async () => {
   try {
 
     await prisma.$connect();
+
     console.log('PostgreSQL connected');
+    console.log('Database',process.env.DIRECT_DATABASE_URL);
+
+
+    await connectDB();
 
     await client.ping();
     console.log('Redis connected');
 
-   
-    console.log('AI service initialized');
+    initSocketServer(server);
+    console.log('Socket.io initialized');
 
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
 
@@ -50,3 +58,4 @@ process.on('SIGINT', async () => {
 
 startServer();
 await scheduleCleanupJob(); 
+

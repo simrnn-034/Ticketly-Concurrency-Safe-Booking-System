@@ -1,5 +1,6 @@
 import client from "../config/redis.js";
 import prisma from "../config/prisma.js";
+import { emitSeatUpdate } from '../config/socket.js';
 
 export const holdSeats = async (userId, eventId, seatIds) => {
   const existingBooking = await prisma.booking.findFirst({
@@ -10,7 +11,7 @@ export const holdSeats = async (userId, eventId, seatIds) => {
 });
 
 if (existingBooking) {
-  throw { message: 'Complete or cancel existing booking first', status: 409 };
+  throw new Error({ message: 'Complete or cancel existing booking first', status: 409 });
 }
   const heldSoFar = [];
 
@@ -18,11 +19,17 @@ if (existingBooking) {
     const holdKey = `hold:${eventId}:${seatId}`;
     const existing = await client.get(holdKey);
 
-    if (existing) {
+    if (existing && existing !== userId) {
       for (let heldId of heldSoFar) {
         await client.del(`hold:${eventId}:${heldId}`);
       }
-      throw { message: 'Seat already held', status: 409 };
+      throw new Error({ message: 'Seat already held', status: 409 });
+    }
+
+    if (existing === userId) {
+      await client.expire(holdKey, 600);
+      heldSoFar.push(seatId);
+      continue;
     }
 
     const held = await client.set(holdKey, userId, 'EX', 600, 'NX');
@@ -31,21 +38,44 @@ if (existingBooking) {
       for (let heldId of heldSoFar) {
         await client.del(`hold:${eventId}:${heldId}`);
       }
-      throw { message: 'Seat taken', status: 409 };
+      throw new Error({ message: 'Seat taken', status: 409 });
     }
 
     heldSoFar.push(seatId);
   }
+
+  await client.del(`seatmap:${eventId}`);
+  heldSoFar.forEach((seatId) => {
+    emitSeatUpdate(eventId, seatId, {
+      status: 'held',
+      isHeld: true,
+      heldBy: userId
+    });
+  });
 };
 
 export const releaseSeats = async (userId, eventId, seatIds) => {
+  const releasedSeats = [];
+
   for (let seatId of seatIds) {
     const holdKey = `hold:${eventId}:${seatId}`;
     const existing = await client.get(holdKey);
 
     if (existing === userId) {
       await client.del(holdKey);
+      releasedSeats.push(seatId);
     }
+  }
+
+  if (releasedSeats.length) {
+    await client.del(`seatmap:${eventId}`);
+    releasedSeats.forEach((seatId) => {
+      emitSeatUpdate(eventId, seatId, {
+        status: 'available',
+        isHeld: false,
+        heldBy: null
+      });
+    });
   }
 };
 

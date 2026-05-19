@@ -4,8 +4,11 @@ import {
   getEventById as getEventByIdService,
   publishEvent as publishEventService,
   cancelEvent as cancelEventService,
-  getOrganizerEvents as getOrganizerEventsService
+  getOrganizerEvents as getOrganizerEventsService,
+  uploadEventImages as uploadEventImagesService
 } from '../services/events.service.js';
+import { getSeatMap } from '../services/seats.service.js';
+import prisma from '../config/prisma.js';
 
 export const createEvent = async (req, res) => {
   try {
@@ -37,6 +40,8 @@ export const getEventById = async (req, res) => {
   }
 };
 
+
+
 export const publishEvent = async (req, res) => {
   try {
     const result = await publishEventService(req.user.id, req.params.id);
@@ -66,3 +71,23 @@ export const getOrganizerEvents = async (req, res) => {
     return res.status(status).json({ error: err.message });
   }
 };
+
+export const uploadEventImages = async (req,res)=>{
+  try{
+    const result = await uploadEventImagesService({
+      eventId: req.params.eventId,
+      files: req.files
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result
+    });
+  }
+  catch(err){
+    return res.status(err.status || 500),json({
+      success: false,
+      message: error.message || "Server Error"
+    })
+  }
+}

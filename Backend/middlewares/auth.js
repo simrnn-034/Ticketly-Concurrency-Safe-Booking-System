@@ -8,7 +8,6 @@ const authMiddleware = async (req, res, next) => {
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
-
     const isBlacklisted = await client.get(`blacklist:${token}`);
     if (isBlacklisted) {
       return res.status(401).json({ error: 'Token invalidated, please login again' });
@@ -30,4 +29,23 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+
+export const attachUser = (req, res, next) => {
+  try {
+    const token = req.cookies?.token;
+
+    if (!token) {
+      req.user = null;
+      return next();
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+
+  } catch (err) {
+    req.user = null;
+  }
+
+  next();
+};
 export default authMiddleware;

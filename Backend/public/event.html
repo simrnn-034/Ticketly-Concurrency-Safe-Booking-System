@@ -11,7 +11,7 @@
 <div id="token-expiry-bar"></div>
 
 <nav>
-  <a href="index.html" class="nav-logo">Ticket<span>Guard</span></a>
+  <a href="index.html" class="nav-logo">Ticket<span>ly</span></a>
   <div class="nav-links">
     <a href="index.html">Events</a>
     <a href="bookings.html">My Bookings</a>
@@ -72,9 +72,11 @@
 </div>
 
 <script src="utils.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script>
   const params = new URLSearchParams(location.search);
   const eventId = params.get('id');
+  const shouldResume = params.get('resume') === 'true';
   if (!eventId) window.location.href = 'index.html';
 
   let event = null;
@@ -85,7 +87,69 @@
   let currentTotal = 0;
   let pendingBooking = null;
   let holdCountdownInterval = null;
+  let socket = null;
   const CAT_COLORS_MAP = {};
+  let currentGalleryIndex = 0;
+let galleryInterval = null;
+
+  function connectSocket() {
+    if (typeof io === 'undefined') return;
+    socket = io({ transports: ['websocket'] });
+
+    socket.on('connect', () => console.log('Realtime seat updates connected'));
+    socket.on('disconnect', () => console.log('Realtime seat updates disconnected'));
+    socket.on('seat:update', handleSeatUpdate);
+
+    socket.emit('joinEventRoom', eventId);
+  }
+
+  function handleSeatUpdate(update) {
+    if (!update || update.eventId !== eventId) return;
+
+    let changed = false;
+    for (const row of Object.keys(seatMap)) {
+      const seat = seatMap[row].find((s) => s.id === update.seatId);
+      if (!seat) continue;
+
+      if (typeof update.isHeld === 'boolean') {
+        seat.isHeld = update.isHeld;
+        seat.heldBy = update.heldBy || null;
+      }
+
+      if (update.status) {
+        if (update.status === 'available') {
+          seat.status = 'available';
+          seat.isHeld = false;
+          seat.heldBy = null;
+        } else if (update.status === 'booked' || update.status === 'blocked') {
+          seat.status = update.status;
+          seat.isHeld = false;
+          seat.heldBy = null;
+        } else if (update.status === 'held') {
+          seat.isHeld = true;
+          seat.heldBy = update.heldBy || null;
+        }
+      }
+
+      changed = true;
+    }
+
+    if (!changed) return;
+
+    const heldByMe = auth.getUser()?.id === update.heldBy;
+    if (selectedSeats.some((s) => s.id === update.seatId)) {
+      const removeSelected = ['booked', 'blocked'].includes(update.status)
+        || (update.status === 'held' && !heldByMe);
+
+      if (removeSelected) {
+        selectedSeats = selectedSeats.filter((s) => s.id !== update.seatId);
+        updateSummary();
+        toast('A selected seat just became unavailable. Your selection was updated.', 'warning');
+      }
+    }
+
+    renderSeatMap();
+  }
 
   async function init() {
     await loadRazorpayScript();
@@ -112,6 +176,11 @@
       }
 
       renderPage();
+      startGalleryAutoplay();
+      connectSocket();
+      if (shouldResume && pendingBooking && String(pendingBooking.eventId) === String(eventId)) {
+        openPaymentModal();
+      }
 
     } catch (err) {
       document.getElementById('page').innerHTML = `
@@ -150,6 +219,48 @@
               <span>👤 ${event.organizer?.name || 'Organizer'}</span>
             </div>
             ${event.description ? `<p style="color:var(--text2); margin-top:0.85rem; max-width:580px; font-size:0.88rem; line-height:1.7;">${event.description}</p>` : ''}
+            ${event.images && event.images.length ? `
+
+  <div class="event-gallery">
+
+    <div class="gallery-main-wrapper">
+
+      <div class="gallery-slider" id="gallery-slider">
+
+        ${event.images.map((img, index) => `
+
+          <img
+            src="${img.url}"
+            class="gallery-image ${index === 0 ? 'active' : ''}"
+            alt="${event.title}"
+          />
+
+        `).join('')}
+
+      </div>
+
+      ${event.images.length > 1 ? `
+
+        <div class="gallery-dots">
+
+          ${event.images.map((_, index) => `
+
+            <button
+              class="gallery-dot ${index === 0 ? 'active' : ''}"
+              onclick="showGalleryImage(${index})"
+            ></button>
+
+          `).join('')}
+
+        </div>
+
+      ` : ''}
+
+    </div>
+
+  </div>
+
+` : ''}
           </div>
           ${isOrganizer ? `<button class="btn btn-outline btn-sm" onclick="openOrgModal()">⚙ Manage</button>` : ''}
         </div>
@@ -186,6 +297,38 @@
     if (pendingBooking) renderPendingBanner();
   }
 
+  function showGalleryImage(index){
+
+  const images = document.querySelectorAll('.gallery-image');
+  const dots = document.querySelectorAll('.gallery-dot');
+
+  images.forEach(img => img.classList.remove('active'));
+  dots.forEach(dot => dot.classList.remove('active'));
+
+  images[index]?.classList.add('active');
+  dots[index]?.classList.add('active');
+
+  currentGalleryIndex = index;
+}
+
+function startGalleryAutoplay(){
+
+  if(!event.images || event.images.length <= 1) return;
+
+  clearInterval(galleryInterval);
+
+  galleryInterval = setInterval(() => {
+
+    currentGalleryIndex++;
+
+    if(currentGalleryIndex >= event.images.length){
+      currentGalleryIndex = 0;
+    }
+
+    showGalleryImage(currentGalleryIndex);
+
+  }, 5000);
+}
   // ── RIGHT PANEL — 3 states ──
   function renderRightPanel() {
     const panel = document.getElementById('right-panel');
@@ -402,7 +545,6 @@
     }
   }
 
-  // ── SEAT MAP ──
   function renderSeatMap() {
     const container = document.getElementById('seat-rows');
     if (!container) return;
@@ -426,8 +568,14 @@
               cls += 'seat-booked'; disabled = true;
             } else if (seat.status === 'blocked') {
               cls += 'seat-blocked'; disabled = true;
-            } else if (seat.status === 'held') {
-              cls += 'seat-held'; disabled = true; title = 'Currently held';
+            } else if (seat.isHeld) {
+              const heldByMe = auth.getUser()?.id === seat.heldBy;
+              if (heldByMe) {
+                cls += 'seat-held-own';
+                title = 'Held by you — click to pay';
+              } else {
+                cls += 'seat-held'; disabled = true; title = 'Currently held';
+              }
             } else {
               cls += 'seat-available';
               const cat = categories.find(c => c.id === seat.categoryId);
@@ -564,13 +712,13 @@ console.log("AMOUNT:", currentTotal);
     key: keyId,
     amount: currentTotal * 100, 
     currency: 'INR',
-    name: 'TicketGuard',
+    name: 'Ticketly',
     description: event.title,
     order_id: orderId,  
     prefill: { name: user?.name || '', email: user?.email || '' },
     theme: { color: '#3b1fa3' },
     handler: async (response) => { 
-      console.log("✅ Handler fired");
+      console.log("Handler fired");
     console.log("Response:", response);
        await confirmBooking(response); 
     },

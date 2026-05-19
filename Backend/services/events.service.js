@@ -1,11 +1,32 @@
 import prisma from '../config/prisma.js';
 import { eventQueue, notificationQueue } from '../queues/index.js';
 import client from '../config/redis.js';
+import EventGallery from '../models/EventGallery.js';
 
-export const InsertEvent = async (organizerId, { title, description, date_time, venue, categories }) => {
+export const InsertEvent = async (organizerId, payload) => {
+  const {
+    title,
+    description,
+    eventDate,
+    date_time,
+    venue,
+    category,
+    categories,
+    seatCategories
+  } = payload;
+
+  const eventDateValue = eventDate || date_time;
+  const itemCategories = seatCategories || categories;
+
+  if (!Array.isArray(itemCategories) || !itemCategories.length) {
+    throw { message: 'Add at least one seating category.', status: 400 };
+  }
+
   let totalSeats = 0;
-  for (let category of categories) {
-    totalSeats += category.rows.length * category.seats_per_row;
+  for (let categoryItem of itemCategories) {
+    const rows = categoryItem.rows || [];
+    const seatsPerRow = categoryItem.seatsPerRow || categoryItem.seats_per_row || 0;
+    totalSeats += rows.length * seatsPerRow;
   }
 
   const event = await prisma.$transaction(async (trx) => {
@@ -13,7 +34,7 @@ export const InsertEvent = async (organizerId, { title, description, date_time, 
       data: {
         title,
         description,
-        eventDate: new Date(date_time),
+        eventDate: new Date(eventDateValue),
         category,
         venue,
         totalSeats,
@@ -22,18 +43,20 @@ export const InsertEvent = async (organizerId, { title, description, date_time, 
       }
     });
 
-    for (let category of categories) {
+    for (let categoryItem of itemCategories) {
+      const rows = categoryItem.rows || [];
+      const seatsPerRow = categoryItem.seatsPerRow || categoryItem.seats_per_row || 0;
       const categoryCreated = await trx.seatCategory.create({
         data: {
-          categoryName: category.name,
-          price: category.price,
+          categoryName: categoryItem.categoryName || categoryItem.name,
+          price: categoryItem.price,
           eventId: newEvent.id,
-          totalSeats: category.rows.length * category.seats_per_row
+          totalSeats: rows.length * seatsPerRow
         }
       });
 
-      const seatValues = category.rows.flatMap(row =>
-        Array.from({ length: category.seats_per_row }, (_, i) => ({
+      const seatValues = rows.flatMap(row =>
+        Array.from({ length: seatsPerRow }, (_, i) => ({
           eventId: newEvent.id,
           categoryId: categoryCreated.id,
           rowLabel: row,
@@ -51,9 +74,17 @@ export const InsertEvent = async (organizerId, { title, description, date_time, 
 };
 
 export const getEvents = async () => {
-  return await prisma.event.findMany({
-    where: { status: 'published'},
-    orderBy: { eventDate: 'asc' },
+
+  const events = await prisma.event.findMany({
+
+    where: {
+      status: 'published'
+    },
+
+    orderBy: {
+      eventDate: 'asc'
+    },
+
     include: {
       seatCategories: {
         select: {
@@ -64,6 +95,30 @@ export const getEvents = async () => {
       }
     }
   });
+
+  const galleries =
+  await EventGallery.find({
+    eventId: {
+      $in: events.map(event => event.id)
+    }
+  });
+
+  const galleryMap = {};
+
+  galleries.forEach(gallery => {
+    galleryMap[gallery.eventId] = gallery;
+  });
+
+  const updatedEvents =
+  events.map(event => ({
+
+    ...event,
+
+    thumbnail:
+      galleryMap[event.id]?.images?.[0]?.url || null
+  }));
+
+  return updatedEvents;
 };
 
 export const getEventById = async (eventId) => {
@@ -82,8 +137,18 @@ export const getEventById = async (eventId) => {
 
   if (!event) throw { message: 'Event not found', status: 404 };
 
-  await client.set(`event:${eventId}`, JSON.stringify(event), 'EX', 300);
-  return event;
+  const gallery = await EventGallery.findOne({
+    eventId
+  });
+
+  const eventWithImages = {
+    ...event,
+    images: gallery?.images || []
+  };
+
+
+  await client.set(`event:${eventId}`, JSON.stringify(eventWithImages), 'EX', 300);
+  return eventWithImages;
 };
 
 export const publishEvent = async (userId, eventId) => {
@@ -113,21 +178,56 @@ export const publishEvent = async (userId, eventId) => {
   return updatedEvent;
 };
 
-export const getOrganizerEvents = async (organizerId) => {
-  return await prisma.event.findMany({
-    where: { organizerId }, 
-    orderBy: { eventDate: 'asc' },
+export const getOrganizerEvents =
+async (organizerId) => {
+
+  const events =
+  await prisma.event.findMany({
+
+    where: {
+      organizerId
+    },
+
+    orderBy: {
+      eventDate: 'asc'
+    },
+
     include: {
+
       seatCategories: {
+
         select: {
           id: true,
           categoryName: true,
           price: true
-
         }
       }
     }
   });
+
+  const galleries =
+  await EventGallery.find({
+    eventId: {
+      $in: events.map(event => event.id)
+    }
+  });
+
+  const galleryMap = {};
+
+  galleries.forEach(gallery => {
+    galleryMap[gallery.eventId] = gallery.images;
+  });
+
+  const updatedEvents =
+  events.map(event => ({
+
+    ...event,
+
+    images:
+      galleryMap[event.id] || []
+  }));
+
+  return updatedEvents;
 };
 
 export const cancelEvent = async (userId, eventId) => {
@@ -173,3 +273,38 @@ export const cancelEvent = async (userId, eventId) => {
   return { eventId, status: 'cancelled' };
 };
 
+export const uploadEventImages = async ({
+  eventId,
+  files 
+})=>{
+  const event = await prisma.event.findUnique({
+    where: {id: eventId}
+  });
+  if(!event){
+    throw (404,"Event Not Found")
+  }
+  if(!files || files.length == 0){
+    throw new Error(400,"No images uploaded")
+  }
+  const imageData = files.map(file => ({
+    url : file.path,
+    publicId: file.filename
+  }));
+
+  let gallery = await EventGallery.findOne({
+    eventId
+  })
+  if(gallery){
+    gallery.images.push(...imageData);
+    await gallery.save();
+  }
+  else{
+    gallery = await EventGallery.create({
+      eventId,
+      images : imageData
+    });
+  }
+
+  return gallery
+
+}

@@ -1,6 +1,7 @@
 import redlock from "../config/redlock.js";
 import prisma from "../config/prisma.js";
 import client from "../config/redis.js";
+import { emitSeatUpdate } from '../config/socket.js';
 import { verifyHolds } from "./seats.service.js";
 import { notificationQueue, bookingQueue } from "../queues/index.js";
 import { Prisma } from '@prisma/client';
@@ -165,6 +166,14 @@ const confirmBooking = async (userId, bookingId,paymentDetails) => {
         await client.del(`active-booking:${userId}`);
         await client.del(`recommendations:${userId}`);
 
+        seatIds.forEach((seatId) => {
+          emitSeatUpdate(booking.eventId, seatId, {
+            status: 'booked',
+            isHeld: false,
+            heldBy: null
+          });
+        });
+
         const job = await bookingQueue.getJob(`expire-booking-${bookingId}`);
         if (job) await job.remove();
 
@@ -219,7 +228,15 @@ const cancelBooking = async (userId, bookingId) => {
 
     await client.del(`active-booking:${userId}`);
     await client.del(`seatmap:${booking.eventId}`);
-    await client.del(`hold:${booking.eventId}:${seatIds.join(',')}`);
+    await Promise.all(seatIds.map((seatId) => client.del(`hold:${booking.eventId}:${seatId}`)));
+
+    seatIds.forEach((seatId) => {
+      emitSeatUpdate(booking.eventId, seatId, {
+        status: 'available',
+        isHeld: false,
+        heldBy: null
+      });
+    });
 
     await notificationQueue.add('booking-cancellation', {
         userId,
@@ -333,11 +350,11 @@ const getActiveBookings = async (userId) => {
       }
     }
   });
+  if(!booking) return null;
   booking.razorpayKeyId = process.env.RAZORPAY_KEY_ID; 
 
   return {
-    booking,
-    
+    booking
   }; // single booking, not array — only one active allowed
 };
 

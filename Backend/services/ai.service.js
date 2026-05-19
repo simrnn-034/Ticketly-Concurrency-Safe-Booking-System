@@ -2,6 +2,7 @@ import ai from '../config/gemini.js';
 import prisma from '../config/prisma.js';
 import client from '../config/redis.js';
 import { buildRecommendationPrompt } from '../utils/promptBuilder.js';
+import { generateDesc } from '../utils/generateDesc.js';
 
 export const getRecommendations = async (userId) => {
     const cacheKey = `recommendations:${userId}`;
@@ -31,7 +32,7 @@ export const getRecommendations = async (userId) => {
             systemInstruction: `
                 You are an event recommendation engine.
                 Analyze the user's booking history and recommend the most relevant events.
-                Only recommend events from the provided list using their exact id.`,  // ✅ no manual JSON shape — schema handles it
+                Only recommend events from the provided list using their exact id.`,  
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             config: {
                 responseMimeType: 'application/json',
@@ -67,7 +68,6 @@ export const getRecommendations = async (userId) => {
             reason: parsed.recommendations.find(r => r.eventId === event.id)?.reason,
         }));
 
-        console.log("AI recommendation result:", result);
 
         await client.set(cacheKey, JSON.stringify(result), 'EX', 1800);
         return result;
@@ -78,22 +78,7 @@ export const getRecommendations = async (userId) => {
 };
 
 export const generateDescription = async (event) => {
-    const prompt = `
-Create a compelling description for an event with the following details:
-
-Event Title: ${event.title}
-Venue: ${event.venue}
-Date: ${new Date(event.eventDate).toLocaleDateString()}
-Category: ${event.category}
-Artist: ${event.artist}
-Additional Info: ${event.additionalInfo || 'N/A'}
-
-Write an engaging 3-4 sentence description that:
-- Highlights the unique aspects of the event
-- Appeals to potential attendees
-- Avoids generic phrases and focuses on what makes this event special
-- Sounds professional and energetic
-    `.trim();
+    const prompt = generateDesc(event);
 
     try {
         const res = await ai.models.generateContent({
@@ -101,12 +86,12 @@ Write an engaging 3-4 sentence description that:
             systemInstruction: `You are a professional event copywriter. 
                 Write descriptions that are exciting, clear, and concise. 
                 Never use placeholder text. Always write complete sentences.`,
-            contents: [{ role: "user", parts: [{ text: prompt }] }],  // ✅ structured format
+            contents: [{ role: "user", parts: [{ text: prompt }] }], 
         });
 
         return { description: res.text.trim() };
     } catch (error) {
         console.error("Description generation failed:", error.message);
-        return { description: null, error: "AI response cannot be generated. Please try again later." };  // ✅ consistent object shape
+        return { description: null, error: "AI response cannot be generated. Please try again later." };  
     }
 };

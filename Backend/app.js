@@ -1,16 +1,21 @@
 import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
+import cors from 'cors'; //cross-origin resource sharing
+import helmet from 'helmet'; //security
+import morgan from 'morgan'; //logging
 import path from 'path';
-import cookieParser from 'cookie-parser';
-import { fileURLToPath } from 'url';
+import cookieParser from 'cookie-parser'; // to parse cookies from incoming requests
+import { fileURLToPath } from 'url'; 
+
 import authRoutes from './routes/auth.routes.js';
 import eventRoutes from './routes/events.routes.js';
 import seatRoutes from './routes/seats.routes.js';
 import bookingRoutes from './routes/bookings.routes.js';
 import aiRoutes from './routes/ai.routes.js';
+import pagesRoutes from './routes/pages.routes.js'; 
+
 import bodyParser from 'body-parser';
+
+import { attachUser } from './middlewares/auth.js'; // custom middleware to attach user info to requests based on JWT token
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -23,15 +28,16 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 
 app.use(helmet({
+  // It controls which resources the browser is allowed to load for a given page, and from which origins. This helps prevent XSS and data injection attacks.
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com", "https://cdn.razorpay.com"],
-      scriptSrcElem: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com", "https://cdn.razorpay.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com", "https://cdn.razorpay.com", "https://cdn.socket.io"],
+      scriptSrcElem: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com", "https://cdn.razorpay.com", "https://cdn.socket.io"],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://*.razorpay.com"],
+      imgSrc: ["'self'", "data:", "https://*.razorpay.com", "https://res.cloudinary.com"],
       connectSrc: ["'self'", "https://api.razorpay.com", "https://lumberjack.razorpay.com", "https://*.razorpay.com"],
       frameSrc: ["'self'", "https://checkout.razorpay.com", "https://api.razorpay.com"]
     }
@@ -39,11 +45,13 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,  // ← allows Razorpay iframe to load
   crossOriginOpenerPolicy: false,    // ← allows popup handler callback to fire
 }));
+
 app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
   res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
   next();
 });
+
 app.use(cors(
   { origin: 'http://localhost:3000', 
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT'],
@@ -51,15 +59,30 @@ app.use(cors(
     credentials: true
    },
 ));
+
 app.use(express.json());
-// app.use(morgan('combined'));
+
+app.use(morgan('combined'));
+
 app.use(cookieParser());
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+app.use(attachUser); 
+
+app.use((req, res, next) => {
+  res.locals.user = req.user || null;
+  next();
 });
 
+
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.use((req, res, next) => {
+  if (req.path.endsWith('.html')) {
+    const cleanPath = req.path.replace(/\.html$/, '') || '/';
+    return res.redirect(cleanPath);
+  }
+  next();
+});
 
 // routes
 app.use('/api/auth', authRoutes);
@@ -67,6 +90,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/seats', seatRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/', pagesRoutes);
 
 // 404 handler
 app.use((req, res) => {

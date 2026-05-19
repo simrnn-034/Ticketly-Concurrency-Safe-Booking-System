@@ -38,12 +38,12 @@ async function request(method, path, body = null) {
   if (res.status === 401) {
   const hadSession = !!auth.user;
   auth.clear(); 
-  const onAuthPage = location.pathname.endsWith('auth.html');
+  const onAuthPage = location.pathname === '/auth';
   if (!onAuthPage && hadSession) {
     toast('Session expired. Please sign in again.', 'warning');
-    setTimeout(() => window.location.href = 'auth.html', 1200);
+    setTimeout(() => window.location.href = '/auth', 1200);
   } else if (!onAuthPage) {
-    window.location.href = 'auth.html';
+    window.location.href = '/auth';
   }
 
   throw new Error('Unauthorized');
@@ -80,22 +80,22 @@ async function initNav() {
         </span>
       </div>
       ${user.role === 'organizer'
-        ? `<a href="organizer.html" class="btn btn-ghost btn-sm">My Events</a>`
+        ? `<a href="/organizer" class="btn btn-ghost btn-sm">My Events</a>`
         : ''}
-      <a href="bookings.html" class="btn btn-outline btn-sm">Bookings</a>
+      <a href="/bookings" class="btn btn-outline btn-sm">Bookings</a>
       <button class="btn btn-ghost btn-sm" onclick="logout()">Sign Out</button>
     `;
   } else {
     navRight.innerHTML = `
-      <a href="auth.html" class="btn btn-outline btn-sm">Sign In</a>
-      <a href="auth.html?tab=register" class="btn btn-primary btn-sm">Get Started</a>
+      <a href="/auth" class="btn btn-outline btn-sm">Sign In</a>
+      <a href="/auth?tab=register" class="btn btn-primary btn-sm">Get Started</a>
     `;
   }
 
-  const currentPage = location.pathname.split('/').pop();
+  const currentPath = location.pathname === '/' ? '/' : location.pathname;
   document.querySelectorAll('.nav-links a').forEach(a => {
     const href = a.getAttribute('href');
-    if (href === currentPage || (currentPage === '' && href === 'index.html')) {
+    if (href === currentPath || (currentPath === '/' && href === '/')) {
       a.classList.add('active');
     }
   });
@@ -109,7 +109,7 @@ async function logout() {
   auth.clear();
   toast('Signed out successfully', 'success');
 
-  setTimeout(() => window.location.href = 'index.html', 500);
+  setTimeout(() => window.location.href = '/', 500);
 }
 
 
@@ -119,7 +119,7 @@ async function requireAuth(redirect = true) {
   if (!loggedIn) {
     if (redirect) {
       window.location.href =
-        `auth.html?redirect=${encodeURIComponent(location.href)}`;
+        `/auth?redirect=${encodeURIComponent(location.href)}`;
     }
     return false;
   }
@@ -210,3 +210,4 @@ function statusBadge(status) {
 const CAT_COLORS = ['#6c3fc5', '#0891b2', '#059669', '#dc2626', '#d97706', '#7c3aed'];
 
 document.addEventListener('DOMContentLoaded', initNav);
+
